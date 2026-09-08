@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String       @unique
+  logoUrl     String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  users       Membership[]
+  workspaces  Workspace[]
+  auditLogs   AuditLog[]
+}
+
+model User {
+  id            String       @id @default(uuid())
+  email         String       @unique
+  name          String
+  passwordHash  String
+  avatarUrl     String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  memberships   Membership[]
+  contents      Content[]    @relation("ContentAuthor")
+  approvals     Approval[]   @relation("ApprovalUser")
+  auditLogs     AuditLog[]
+}
+
+model Membership {
+  id             String       @id @default(uuid())
+  userId         String
+  organizationId String
+  role           String       @default("EDITOR")
+  createdAt      DateTime     @default(now())
+
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Workspace {
+  id             String             @id @default(uuid())
+  organizationId String
+  name           String
+  slug           String
+  logoUrl        String?
+  isFavorite     Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  socialConnections SocialConnection[]
+  contents       Content[]
+  mediaAssets    MediaAsset[]
+  analytics      AnalyticsSnapshot[]
+  auditLogs      AuditLog[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+model SocialConnection {
+  id                 String            @id @default(uuid())
+  workspaceId        String
+  platform           String
+  accountName        String
+  accountId          String
+  avatarUrl          String?
+  status             String            @default("CONNECTED")
+  scopes             String            @default("[]")
+  accessTokenEnc     String
+  refreshTokenEnc    String?
+  expiresAt          DateTime?
+  lastCheckedAt      DateTime          @default(now())
+  healthErrorMessage String?
+  capabilities       String            @default("{}")
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  workspace          Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  publications       Publication[]
+
+  @@unique([workspaceId, platform, accountId])
+  @@index([workspaceId])
+}
+
+model MediaAsset {
+  id          String    @id @default(uuid())
+  workspaceId String
+  fileName    String
+  fileSize    Int
+  mimeType    String
+  storageKey  String
+  publicUrl   String
+  width       Int?
+  height      Int?
+  duration    Int?
+  folderPath  String    @default("/")
+  createdAt   DateTime  @default(now())
+
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contentVariants ContentVariantMedia[]
+
+  @@index([workspaceId])
+}
+
+model Content {
+  id            String        @id @default(uuid())
+  workspaceId   String
+  authorId      String
+  title         String
+  masterCaption String
+  status        String        @default("DRAFT")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  workspace     Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  author        User          @relation("ContentAuthor", fields: [authorId], references: [id])
+  variants      ContentVariant[]
+  approvals     Approval[]
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+model ContentVariant {
+  id                 String              @id @default(uuid())
+  contentId          String
+  platform           String
+  caption            String
+  hashtags           String              @default("[]")
+  metadata           String?
+  createdAt          DateTime            @default(now())
+
+  content            Content             @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  mediaAttachments   ContentVariantMedia[]
+  publications       Publication[]
+
+  @@unique([contentId, platform])
+}
+
+model ContentVariantMedia {
+  contentVariantId String
+  mediaAssetId     String
+  order            Int            @default(0)
+
+  contentVariant   ContentVariant @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
+  mediaAsset       MediaAsset     @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@id([contentVariantId, mediaAssetId])
+}
+
+model Publication {
+  id                  String            @id @default(uuid())
+  contentVariantId    String
+  socialConnectionId  String
+  scheduledAt         DateTime
+  status              String            @default("SCHEDULED")
+  idempotencyKey      String            @unique
+  providerPostId      String?
+  publishedAt         DateTime?
+  lastAttemptAt       DateTime?
+  attempts            Int               @default(0)
+  errorMessage        String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  contentVariant      ContentVariant    @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
+  socialConnection    SocialConnection  @relation(fields: [socialConnectionId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+model Approval {
+  id          String            @id @default(uuid())
+  contentId   String
+  userId      String
+  status      String
+  comment     String?
+  createdAt   DateTime          @default(now())
+
+  content     Content           @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  user        User              @relation("ApprovalUser", fields: [userId], references: [id])
+}
+
+model AnalyticsSnapshot {
+  id           String    @id @default(uuid())
+  workspaceId  String
+  platform     String
+  date         DateTime
+  impressions  Int       @default(0)
+  reach        Int       @default(0)
+  likes        Int       @default(0)
+  comments     Int       @default(0)
+  shares       Int       @default(0)
+  clicks       Int       @default(0)
+  followers    Int       @default(0)
+
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform, date])
+  @@index([workspaceId, date])
+}
+
+model AuditLog {
+  id             String       @id @default(uuid())
+  organizationId String
+  workspaceId    String?
+  userId         String
+  action         String
+  entityType     String
+  entityId       String?
+  details        String?
+  ipAddress      String?
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace      Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([workspaceId, createdAt])
+}
