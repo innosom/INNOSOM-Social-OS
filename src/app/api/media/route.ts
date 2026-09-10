@@ -11,18 +11,25 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const workspaceId = searchParams.get('workspaceId');
 
-  if (!workspaceId) {
-    return NextResponse.json({ error: 'workspaceId is required' }, { status: 400 });
-  }
-
-  const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
-  if (!hasAccess) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
   try {
+    const whereClause: any = {};
+    if (workspaceId && workspaceId !== 'ALL_CLIENTS') {
+      const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
+      if (!hasAccess) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      whereClause.workspaceId = workspaceId;
+    } else {
+      whereClause.workspace = { organizationId: session.organizationId };
+    }
+
     const media = await prisma.mediaAsset.findMany({
-      where: { workspaceId },
+      where: whereClause,
+      include: {
+        workspace: {
+          select: { id: true, name: true, logoUrl: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
