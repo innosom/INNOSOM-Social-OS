@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
+import { enqueuePublicationJob } from '@/modules/publishing/QueueService';
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest) {
     const content = await prisma.content.findUnique({
       where: { id: contentId },
       include: {
+        workspace: true,
         variants: {
           include: { publications: true },
         },
@@ -49,14 +51,42 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // Handle variants and associated publications
+    const socialConnections = await prisma.socialConnection.findMany({
+      where: { workspaceId: content.workspaceId },
+    });
+
     for (const variant of content.variants) {
-      for (const pub of variant.publications) {
-        if (pub.status === 'IN_REVIEW' || pub.status === 'DRAFT') {
-          await prisma.publication.update({
-            where: { id: pub.id },
-            data: { status: action === 'APPROVE' ? 'SCHEDULED' : 'DRAFT' },
-          });
+      const connection = socialConnections.find((c) => c.platform === variant.platform);
+
+      if (variant.publications.length > 0) {
+        for (const pub of variant.publications) {
+          if (pub.status === 'IN_REVIEW' || pub.status === 'DRAFT' || pub.status === 'APPROVED') {
+            const nextPubStatus = action === 'APPROVE' ? 'SCHEDULED' : 'DRAFT';
+            const updatedPub = await prisma.publication.update({
+              where: { id: pub.id },
+              data: { status: nextPubStatus },
+            });
+
+            if (action === 'APPROVE') {
+              const delay = Math.max(0, new Date(updatedPub.scheduledAt).getTime() - Date.now());
+              await enqueuePublicationJob(updatedPub.id, delay);
+            }
+          }
         }
+      } else if (connection && action === 'APPROVE') {
+        // Create and enqueue publication if none existed previously
+        const scheduledTime = new Date();
+        const newPub = await prisma.publication.create({
+          data: {
+            contentVariantId: variant.id,
+            socialConnectionId: connection.id,
+            scheduledAt: scheduledTime,
+            status: 'SCHEDULED',
+            idempotencyKey: `pub_${content.workspaceId}_${variant.id}_${scheduledTime.getTime()}`,
+          },
+        });
+        await enqueuePublicationJob(newPub.id, 0);
       }
     }
 
