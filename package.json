@@ -6,13 +6,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "worker": "tsx src/worker.ts",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
     "test": "tsx tests/publishing.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
-    "@tailwindcss/postcss": "^4.3.3",
     "bcryptjs": "^2.4.3",
     "bullmq": "^5.41.6",
     "clsx": "^2.1.1",

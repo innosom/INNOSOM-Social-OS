@@ -2,12 +2,32 @@
 
 import React, { useEffect, useState } from 'react';
 import { useWorkspace } from '@/components/switcher/WorkspaceContext';
-import { ShieldCheck, AlertTriangle, RotateCw } from 'lucide-react';
+import {
+  ShieldCheck,
+  AlertTriangle,
+  RotateCw,
+  Plus,
+  Trash2,
+  X,
+  Facebook,
+  Instagram,
+  Video,
+  Youtube,
+  Share2,
+} from 'lucide-react';
 
 export default function ConnectionHealthPage() {
-  const { currentWorkspace, isAgencyMode } = useWorkspace();
+  const { currentWorkspace, isAgencyMode, workspaces } = useWorkspace();
   const [connections, setConnections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Connect Account Modal State
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [targetWorkspaceId, setTargetWorkspaceId] = useState('');
+  const [platform, setPlatform] = useState('FACEBOOK');
+  const [accountName, setAccountName] = useState('');
+  const [accountId, setAccountId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchConnections = () => {
     setLoading(true);
@@ -29,7 +49,58 @@ export default function ConnectionHealthPage() {
 
   useEffect(() => {
     fetchConnections();
-  }, [currentWorkspace, isAgencyMode]);
+    if (currentWorkspace) {
+      setTargetWorkspaceId(currentWorkspace.id);
+    } else if (workspaces.length > 0) {
+      setTargetWorkspaceId(workspaces[0].id);
+    }
+  }, [currentWorkspace, isAgencyMode, workspaces]);
+
+  const handleConnect = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!targetWorkspaceId || !platform || !accountName || !accountId) return;
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/social-connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workspaceId: targetWorkspaceId,
+          platform,
+          accountName,
+          accountId,
+        }),
+      });
+
+      if (res.ok) {
+        setAccountName('');
+        setAccountId('');
+        setIsConnectModalOpen(false);
+        fetchConnections();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDisconnect = async (id: string) => {
+    if (!confirm('Are you sure you want to disconnect this social media account?')) return;
+
+    try {
+      const res = await fetch(`/api/social-connections?id=${id}`, {
+        method: 'DELETE',
+      });
+
+      if (res.ok) {
+        fetchConnections();
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -39,16 +110,25 @@ export default function ConnectionHealthPage() {
             <ShieldCheck className="w-5 h-5 text-amber-500" /> Token & Connection Health Dashboard
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Real-time proactive monitoring of social media platform API tokens and authorization states.
+            Real-time proactive monitoring and connection management for agency social media accounts.
           </p>
         </div>
 
-        <button
-          onClick={fetchConnections}
-          className="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-xs font-bold text-white flex items-center gap-2 self-start sm:self-center"
-        >
-          <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Re-check Token Health
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsConnectModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> Connect Social Account
+          </button>
+
+          <button
+            onClick={fetchConnections}
+            className="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-xs font-bold text-white flex items-center gap-2"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Re-check Health
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -113,7 +193,16 @@ export default function ConnectionHealthPage() {
 
                 <div className="text-[11px] text-neutral-500 border-t border-neutral-800/80 pt-3 flex justify-between items-center">
                   <span>Checked: {new Date(conn.lastCheckedAt).toLocaleTimeString()}</span>
-                  <span className="font-bold text-neutral-400">{conn.platform}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-neutral-400">{conn.platform}</span>
+                    <button
+                      onClick={() => handleDisconnect(conn.id)}
+                      title="Disconnect Account"
+                      className="text-neutral-500 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -123,6 +212,123 @@ export default function ConnectionHealthPage() {
         <div className="p-12 text-center border border-dashed border-neutral-800 rounded-2xl bg-neutral-950">
           <ShieldCheck className="w-10 h-10 text-neutral-600 mx-auto mb-3" />
           <p className="text-sm text-neutral-400 font-medium">No social connections configured in this selection.</p>
+        </div>
+      )}
+
+      {/* Connect Account Modal */}
+      {isConnectModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form
+            onSubmit={handleConnect}
+            className="bg-neutral-900 border border-neutral-800 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4"
+          >
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Share2 className="w-5 h-5 text-amber-500" /> Connect Social Account
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsConnectModalOpen(false)}
+                className="text-neutral-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-2">
+                Target Client Workspace
+              </label>
+              <select
+                value={targetWorkspaceId}
+                onChange={(e) => setTargetWorkspaceId(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              >
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-2">
+                Social Platform
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { id: 'FACEBOOK', label: 'Facebook', icon: Facebook },
+                  { id: 'INSTAGRAM', label: 'Instagram', icon: Instagram },
+                  { id: 'TIKTOK', label: 'TikTok', icon: Video },
+                  { id: 'YOUTUBE', label: 'YouTube', icon: Youtube },
+                ].map((p) => {
+                  const Icon = p.icon;
+                  const isSelected = platform === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPlatform(p.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${
+                        isSelected
+                          ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                          : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span>{p.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-2">
+                Account Display Name
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Haji Abdi Official Page"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-neutral-300 uppercase tracking-wider mb-2">
+                Account ID / Handle
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. @hajiabdicollege"
+                value={accountId}
+                onChange={(e) => setAccountId(e.target.value)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsConnectModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-neutral-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || !accountName || !accountId}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-black bg-amber-500 hover:bg-amber-400 disabled:opacity-50"
+              >
+                {submitting ? 'Connecting...' : 'Authorize & Connect'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

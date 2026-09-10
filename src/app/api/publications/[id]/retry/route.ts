@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
-import { processPublicationJob } from '@/modules/publishing/PublishingWorker';
+import { enqueuePublicationJob } from '@/modules/publishing/QueueService';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Reset status and idempotency key suffix for retry
     await prisma.publication.update({
       where: { id },
       data: {
@@ -42,9 +43,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
-    const result = await processPublicationJob(publication.id);
+    // Enqueue non-blocking job
+    await enqueuePublicationJob(publication.id, 0);
 
-    return NextResponse.json(result);
+    return NextResponse.json({ success: true, message: 'Publication retry queued successfully' });
   } catch (error: any) {
     console.error('Retry publication error:', error);
     return NextResponse.json({ error: 'Failed to retry publication' }, { status: 500 });
