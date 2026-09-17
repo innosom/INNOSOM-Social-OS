@@ -6,6 +6,7 @@ import {
   PublishResult,
   ConnectionStatusResult,
 } from './SocialProvider';
+import { decryptToken } from '@/lib/encryption';
 
 export class TikTokProvider implements SocialProvider {
   getCapabilities(): SocialProviderCapabilities {
@@ -23,7 +24,8 @@ export class TikTokProvider implements SocialProvider {
   }
 
   async validateConnection(credentials: EncryptedCredentials): Promise<ConnectionStatusResult> {
-    if (!credentials.accessTokenEnc || credentials.accessTokenEnc.includes('expired')) {
+    const accessToken = decryptToken(credentials.accessTokenEnc);
+    if (!accessToken || accessToken.includes('expired')) {
       return {
         status: 'EXPIRED',
         errorMessage: 'TikTok OAuth access token expired. Re-authentication required.',
@@ -47,6 +49,7 @@ export class TikTokProvider implements SocialProvider {
     }
 
     try {
+      const accessToken = decryptToken(credentials.accessTokenEnc);
       const fullCaption = `${variant.caption}\n\n${variant.hashtags.join(' ')}`.trim();
       const videoUrl = variant.mediaUrls[0] || 'https://assets.mixkit.co/videos/preview/mixkit-tree-branches-in-the-breeze-1188-large.mp4';
 
@@ -55,7 +58,7 @@ export class TikTokProvider implements SocialProvider {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${credentials.accessTokenEnc}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json; charset=UTF-8',
         },
         body: JSON.stringify({

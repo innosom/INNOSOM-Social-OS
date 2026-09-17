@@ -6,6 +6,7 @@ import {
   PublishResult,
   ConnectionStatusResult,
 } from './SocialProvider';
+import { decryptToken } from '@/lib/encryption';
 
 export class MockSocialProvider implements SocialProvider {
   private platformName: string;
@@ -29,7 +30,8 @@ export class MockSocialProvider implements SocialProvider {
   }
 
   async validateConnection(credentials: EncryptedCredentials): Promise<ConnectionStatusResult> {
-    if (credentials.accessTokenEnc?.includes('expired')) {
+    const accessToken = decryptToken(credentials.accessTokenEnc);
+    if (!accessToken || accessToken.includes('expired')) {
       return {
         status: 'EXPIRED',
         errorMessage: `${this.platformName} OAuth token has expired. Re-authentication required.`,
@@ -43,7 +45,8 @@ export class MockSocialProvider implements SocialProvider {
     credentials: EncryptedCredentials,
     idempotencyKey: string
   ): Promise<PublishResult> {
-    if (credentials.accessTokenEnc?.includes('expired')) {
+    const accessToken = decryptToken(credentials.accessTokenEnc);
+    if (!accessToken || accessToken.includes('expired')) {
       return {
         success: false,
         error: `${this.platformName} connection token expired prior to publishing execution.`,

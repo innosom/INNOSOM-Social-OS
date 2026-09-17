@@ -6,6 +6,7 @@ import {
   PublishResult,
   ConnectionStatusResult,
 } from './SocialProvider';
+import { decryptToken } from '@/lib/encryption';
 
 export class InstagramProvider implements SocialProvider {
   getCapabilities(): SocialProviderCapabilities {
@@ -23,7 +24,8 @@ export class InstagramProvider implements SocialProvider {
   }
 
   async validateConnection(credentials: EncryptedCredentials): Promise<ConnectionStatusResult> {
-    if (!credentials.accessTokenEnc || credentials.accessTokenEnc.includes('expired')) {
+    const accessToken = decryptToken(credentials.accessTokenEnc);
+    if (!accessToken || accessToken.includes('expired')) {
       return {
         status: 'EXPIRED',
         errorMessage: 'Instagram Graph API access token expired. Please re-authenticate.',
@@ -47,6 +49,7 @@ export class InstagramProvider implements SocialProvider {
     }
 
     try {
+      const accessToken = decryptToken(credentials.accessTokenEnc);
       const igAccountId = variant.metadata?.igAccountId || 'me';
       const fullCaption = `${variant.caption}\n\n${variant.hashtags.join(' ')}`.trim();
       const imageUrl = variant.mediaUrls[0] || 'https://images.unsplash.com/photo-1542744094-3a3172720249?w=800';
@@ -59,7 +62,7 @@ export class InstagramProvider implements SocialProvider {
         body: JSON.stringify({
           image_url: imageUrl,
           caption: fullCaption,
-          access_token: credentials.accessTokenEnc,
+          access_token: accessToken,
         }),
       });
 
@@ -79,7 +82,7 @@ export class InstagramProvider implements SocialProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           creation_id: containerData.id,
-          access_token: credentials.accessTokenEnc,
+          access_token: accessToken,
         }),
       });
 
