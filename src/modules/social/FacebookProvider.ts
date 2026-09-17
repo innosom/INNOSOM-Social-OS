@@ -6,6 +6,7 @@ import {
   PublishResult,
   ConnectionStatusResult,
 } from './SocialProvider';
+import { decryptToken } from '@/lib/encryption';
 
 export class FacebookProvider implements SocialProvider {
   private appId: string;
@@ -31,20 +32,21 @@ export class FacebookProvider implements SocialProvider {
   }
 
   async validateConnection(credentials: EncryptedCredentials): Promise<ConnectionStatusResult> {
-    if (!credentials.accessTokenEnc || credentials.accessTokenEnc.includes('expired')) {
+    const accessToken = decryptToken(credentials.accessTokenEnc);
+    if (!accessToken || accessToken.includes('expired')) {
       return {
         status: 'EXPIRED',
         errorMessage: 'Facebook Page access token expired. Re-authentication required.',
       };
     }
 
-    if (credentials.accessTokenEnc.startsWith('enc_token_mock_')) {
+    if (accessToken.startsWith('enc_token_mock_')) {
       return { status: 'CONNECTED' };
     }
 
     try {
       const url = `https://graph.facebook.com/v20.0/me?access_token=${encodeURIComponent(
-        credentials.accessTokenEnc
+        accessToken
       )}`;
       const response = await fetch(url);
       const data = await response.json();
@@ -77,13 +79,14 @@ export class FacebookProvider implements SocialProvider {
     }
 
     try {
+      const accessToken = decryptToken(credentials.accessTokenEnc);
       const pageId = variant.metadata?.pageId || 'me';
       const fullCaption = `${variant.caption}\n\n${variant.hashtags.join(' ')}`.trim();
 
       let endpoint = `https://graph.facebook.com/v20.0/${pageId}/feed`;
       let body: any = {
         message: fullCaption,
-        access_token: credentials.accessTokenEnc,
+        access_token: accessToken,
       };
 
       if (variant.mediaUrls && variant.mediaUrls.length > 0) {

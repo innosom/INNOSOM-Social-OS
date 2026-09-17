@@ -6,6 +6,7 @@ import {
   PublishResult,
   ConnectionStatusResult,
 } from './SocialProvider';
+import { decryptToken } from '@/lib/encryption';
 
 export class YouTubeProvider implements SocialProvider {
   getCapabilities(): SocialProviderCapabilities {
@@ -23,7 +24,8 @@ export class YouTubeProvider implements SocialProvider {
   }
 
   async validateConnection(credentials: EncryptedCredentials): Promise<ConnectionStatusResult> {
-    if (!credentials.accessTokenEnc || credentials.accessTokenEnc.includes('expired')) {
+    const accessToken = decryptToken(credentials.accessTokenEnc);
+    if (!accessToken || accessToken.includes('expired')) {
       return {
         status: 'EXPIRED',
         errorMessage: 'YouTube Data API OAuth access token expired. Re-authentication required.',
@@ -47,6 +49,7 @@ export class YouTubeProvider implements SocialProvider {
     }
 
     try {
+      const accessToken = decryptToken(credentials.accessTokenEnc);
       const videoTitle = variant.metadata?.title || variant.caption.substring(0, 100);
       const description = `${variant.caption}\n\n${variant.hashtags.join(' ')}`.trim();
 
@@ -55,7 +58,7 @@ export class YouTubeProvider implements SocialProvider {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${credentials.accessTokenEnc}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

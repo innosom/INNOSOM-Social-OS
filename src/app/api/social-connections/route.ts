@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
+import { encryptToken } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
   const session = await getSession();
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
           });
         }
 
-        // IMPORTANT SECURITY RULE: Exclude raw access/refresh tokens before returning to client
+        // IMPORTANT SECURITY RULE: Exclude raw/encrypted access/refresh tokens before returning to client
         const { accessTokenEnc, refreshTokenEnc, ...safeConnection } = conn;
 
         return {
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ connections: evaluatedConnections });
   } catch (error: any) {
-    console.error('Fetch social connections error:', error);
+    console.error('Fetch social connections error:', error.message || 'Unknown error');
     return NextResponse.json({ error: 'Failed to fetch social connections' }, { status: 500 });
   }
 }
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { workspaceId, platform, accountName, accountId, avatarUrl } = await req.json();
+    const { workspaceId, platform, accountName, accountId, avatarUrl, accessToken, refreshToken } = await req.json();
 
     if (!workspaceId || !platform || !accountName || !accountId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -94,6 +95,10 @@ export async function POST(req: NextRequest) {
     const provider = SocialProviderFactory.getProvider(platform);
     const capabilities = provider.getCapabilities();
 
+    const rawAccessToken = accessToken || `enc_token_mock_${platform.toLowerCase()}_${Date.now()}`;
+    const encryptedAccessToken = encryptToken(rawAccessToken)!;
+    const encryptedRefreshToken = refreshToken ? encryptToken(refreshToken) : null;
+
     const connection = await prisma.socialConnection.create({
       data: {
         workspaceId,
@@ -103,7 +108,8 @@ export async function POST(req: NextRequest) {
         avatarUrl: avatarUrl || workspace.logoUrl,
         status: 'CONNECTED',
         scopes: JSON.stringify(['publish_content', 'read_insights']),
-        accessTokenEnc: `enc_token_mock_${platform.toLowerCase()}_${Date.now()}`,
+        accessTokenEnc: encryptedAccessToken,
+        refreshTokenEnc: encryptedRefreshToken,
         capabilities: JSON.stringify(capabilities),
       },
     });
@@ -123,7 +129,7 @@ export async function POST(req: NextRequest) {
     const { accessTokenEnc, refreshTokenEnc, ...safeConnection } = connection;
     return NextResponse.json({ connection: safeConnection });
   } catch (error: any) {
-    console.error('Connect social account error:', error);
+    console.error('Connect social account error:', error.message || 'Unknown error');
     return NextResponse.json({ error: 'Failed to connect social account' }, { status: 500 });
   }
 }
@@ -179,7 +185,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('Disconnect social account error:', error);
+    console.error('Disconnect social account error:', error.message || 'Unknown error');
     return NextResponse.json({ error: 'Failed to disconnect social account' }, { status: 500 });
   }
 }
