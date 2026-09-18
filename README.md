@@ -46,9 +46,11 @@
    ```env
    DATABASE_URL="file:./dev.db"
    JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
+   ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
    ```
 
 3. **Initialize Database & Seed Data**:
+   For local development using SQLite:
    ```bash
    npm run db:push
    npm run db:seed
@@ -69,3 +71,18 @@
    ```bash
    npm test
    ```
+
+---
+
+## Production Deployment & PostgreSQL
+
+For production deployment using PostgreSQL with database migrations, refer to [DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+Quick setup for PostgreSQL:
+```bash
+# Apply Prisma migrations
+npm run db:migrate:deploy
+
+# Seed initial data
+npm run db:seed
+```
