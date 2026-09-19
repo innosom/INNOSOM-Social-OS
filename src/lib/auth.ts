@@ -32,9 +32,29 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+export async function getSession(req?: any): Promise<SessionPayload | null> {
+  let token: string | undefined;
+
+  if (req && req.headers) {
+    const cookieHeader = typeof req.headers.get === 'function'
+      ? req.headers.get('cookie')
+      : req.headers.cookie;
+
+    if (cookieHeader) {
+      const match = cookieHeader.match(new RegExp(`(?:^|; )\\s*${COOKIE_NAME}=([^;]*)`));
+      if (match) token = match[1];
+    }
+  }
+
+  if (!token) {
+    try {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value;
+    } catch {
+      // Outside request context
+    }
+  }
+
   if (!token) return null;
   return verifySessionToken(token);
 }

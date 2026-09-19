@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
+import { StorageProviderFactory } from '@/modules/storage/StorageProviderFactory';
+import { validateMediaFile, generateStorageKey, sanitizeFolderPath } from '@/modules/storage/validation';
+import { extractMediaMetadata } from '@/modules/storage/metadata';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -50,58 +53,93 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const workspaceId = formData.get('workspaceId') as string;
     const file = formData.get('file') as File | null;
-    const folderPath = (formData.get('folderPath') as string) || '/';
+    const rawFolderPath = (formData.get('folderPath') as string) || '/';
 
     if (!workspaceId || !file) {
       return NextResponse.json({ error: 'workspaceId and file are required' }, { status: 400 });
     }
 
+    // Authorization check
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const isVideo = file.type.startsWith('video/');
-    const sampleUrls = isVideo
-      ? [
-          'https://assets.mixkit.co/videos/preview/mixkit-tree-branches-in-the-breeze-1188-large.mp4',
-        ]
-      : [
-          'https://images.unsplash.com/photo-1542744094-3a3172720249?w=800&auto=format&fit=crop&q=80',
-          'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=800&auto=format&fit=crop&q=80',
-          'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=80',
-        ];
+    // Validation check (MIME type, extension, size, filename)
+    const validation = validateMediaFile(file);
+    if (!validation.valid) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
 
-    const publicUrl = sampleUrls[Math.floor(Math.random() * sampleUrls.length)];
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const folderPath = sanitizeFolderPath(rawFolderPath);
 
-    const mediaAsset = await prisma.mediaAsset.create({
-      data: {
-        workspaceId,
-        fileName: file.name,
-        fileSize: file.size,
-        mimeType: file.type || 'application/octet-stream',
-        storageKey: `workspaces/${workspaceId}/${Date.now()}-${file.name}`,
-        publicUrl,
-        folderPath,
-        width: isVideo ? 1080 : 1200,
-        height: isVideo ? 1920 : 630,
-        duration: isVideo ? 30 : null,
-      },
-    });
+    // Extract actual metadata (width, height, duration, mimeType, fileSize)
+    const metadata = extractMediaMetadata(buffer, file.type);
 
-    await prisma.auditLog.create({
-      data: {
-        organizationId: session.organizationId,
-        workspaceId,
-        userId: session.userId,
-        action: 'UPLOAD_MEDIA',
-        entityType: 'MediaAsset',
-        entityId: mediaAsset.id,
-        details: JSON.stringify({ fileName: mediaAsset.fileName, size: mediaAsset.fileSize }),
-      },
-    });
+    // Generate safe storage key
+    const storageKey = generateStorageKey(workspaceId, file.name);
 
-    return NextResponse.json({ mediaAsset });
+    const storage = StorageProviderFactory.getStorageProvider();
+
+    // Store asset in object storage
+    let publicUrl: string;
+    try {
+      publicUrl = await storage.uploadObject({
+        key: storageKey,
+        buffer,
+        contentType: metadata.mimeType,
+        isPublic: true,
+      });
+    } catch (storageError: any) {
+      console.error('Storage upload failed:', storageError);
+      return NextResponse.json({ error: 'Failed to upload media file to storage' }, { status: 500 });
+    }
+
+    // Database record creation with cleanup if DB operation fails
+    try {
+      const mediaAsset = await prisma.$transaction(async (tx) => {
+        const createdAsset = await tx.mediaAsset.create({
+          data: {
+            workspaceId,
+            fileName: file.name,
+            fileSize: metadata.fileSize,
+            mimeType: metadata.mimeType,
+            storageKey,
+            publicUrl,
+            folderPath,
+            width: metadata.width,
+            height: metadata.height,
+            duration: metadata.duration,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            organizationId: session.organizationId,
+            workspaceId,
+            userId: session.userId,
+            action: 'UPLOAD_MEDIA',
+            entityType: 'MediaAsset',
+            entityId: createdAsset.id,
+            details: JSON.stringify({ fileName: createdAsset.fileName, size: createdAsset.fileSize }),
+          },
+        });
+
+        return createdAsset;
+      });
+
+      return NextResponse.json({ mediaAsset });
+    } catch (dbError: any) {
+      console.error('Database record creation failed after storage upload, rolling back storage file:', dbError);
+      try {
+        await storage.deleteObject(storageKey);
+      } catch (cleanupError) {
+        console.error('Failed to cleanup storage file after database error:', cleanupError);
+      }
+      return NextResponse.json({ error: 'Failed to save media asset record' }, { status: 500 });
+    }
   } catch (error: any) {
     console.error('Upload media error:', error);
     return NextResponse.json({ error: 'Failed to upload media asset' }, { status: 500 });
