@@ -8,3 +8,5 @@ build
 .env
 .env.local
 coverage
+uploads/
+*.tsbuildinfo
