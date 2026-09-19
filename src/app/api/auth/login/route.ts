@@ -44,9 +44,9 @@ export async function POST(req: NextRequest) {
       role: membership.role,
     };
 
-    await setSessionCookie(sessionPayload);
+    const token = await setSessionCookie(sessionPayload);
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       user: {
         id: user.id,
@@ -56,14 +56,24 @@ export async function POST(req: NextRequest) {
         organization: membership.organization,
       },
     });
+
+    res.cookies.set('innosom_session', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+
+    return res;
   } catch (error: any) {
     console.error('Login error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
 
-export async function GET() {
-  const session = await getSession();
+export async function GET(req: NextRequest) {
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ user: null }, { status: 401 });
   }
@@ -72,5 +82,7 @@ export async function GET() {
 
 export async function DELETE() {
   await clearSessionCookie();
-  return NextResponse.json({ success: true });
+  const res = NextResponse.json({ success: true });
+  res.cookies.delete('innosom_session');
+  return res;
 }

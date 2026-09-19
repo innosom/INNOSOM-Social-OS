@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession, validateWorkspaceAccess } from '@/lib/auth';
+import { getSession, validateWorkspaceAccess, validateWorkspaceMutationAccess } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -64,9 +64,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
   }
 
   try {
@@ -84,9 +88,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required content parameters' }, { status: 400 });
     }
 
-    const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
-    if (!hasAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const mutationCheck = await validateWorkspaceMutationAccess(session, workspaceId, prisma);
+    if (!mutationCheck.hasAccess) {
+      return NextResponse.json(
+        { error: mutationCheck.error || 'Forbidden' },
+        { status: mutationCheck.error?.includes('ALL_CLIENTS') ? 400 : 403 }
+      );
+    }
+
+    // Check media assets cross-workspace references
+    for (const p of platforms) {
+      if (p.mediaAssetIds && p.mediaAssetIds.length > 0) {
+        const validMedia = await prisma.mediaAsset.findMany({
+          where: {
+            id: { in: p.mediaAssetIds },
+            workspaceId,
+          },
+        });
+        if (validMedia.length !== p.mediaAssetIds.length) {
+          return NextResponse.json(
+            { error: 'Forbidden: Cannot reference media assets from another workspace' },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const initialStatus = submitForApproval
