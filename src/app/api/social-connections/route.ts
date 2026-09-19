@@ -5,7 +5,7 @@ import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 import { encryptToken } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -75,9 +75,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Read-only role' }, { status: 403 });
   }
 
   try {
@@ -85,6 +89,10 @@ export async function POST(req: NextRequest) {
 
     if (!workspaceId || !platform || !accountName || !accountId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+
+    if (workspaceId === 'ALL_CLIENTS') {
+      return NextResponse.json({ error: 'Cannot connect social account with ALL_CLIENTS workspace selector' }, { status: 400 });
     }
 
     const { hasAccess, workspace } = await validateWorkspaceAccess(session, workspaceId, prisma);
@@ -135,9 +143,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Read-only role' }, { status: 403 });
   }
 
   try {

@@ -11,8 +11,15 @@ let connection: Redis | null = null;
 function getRedisConnection(): Redis {
   if (!connection) {
     connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      maxRetriesPerRequest: null,
+      maxRetriesPerRequest: 0,
       enableOfflineQueue: false,
+      connectTimeout: 1000,
+      retryStrategy() {
+        return null; // Do not retry connection if Redis is unavailable
+      },
+    });
+    connection.on('error', () => {
+      // Catch connection errors when local Redis instance is not running
     });
   }
   return connection;
@@ -51,13 +58,17 @@ export async function enqueuePublicationJob(
     );
     console.log(`📥 [Queue] Enqueued publication job ${publicationId} with delay ${delayMs}ms`);
   } catch (err) {
-    console.warn(`⚠️ [Queue] Redis Queue unavailable. Fallback to direct execution for ${publicationId}`);
-    // Async execution fallback in local dev without Redis instance
-    setTimeout(() => {
-      processPublicationJob(publicationId).catch((e) =>
+    if (delayMs > 0) {
+      setTimeout(() => {
+        processPublicationJob(publicationId).catch((e) =>
+          console.error('Fallback worker error:', e)
+        );
+      }, delayMs);
+    } else {
+      await processPublicationJob(publicationId).catch((e) =>
         console.error('Fallback worker error:', e)
       );
-    }, delayMs);
+    }
   }
 }
 

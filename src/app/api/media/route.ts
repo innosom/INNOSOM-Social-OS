@@ -2,8 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+]);
+
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -41,9 +53,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Read-only role' }, { status: 403 });
   }
 
   try {
@@ -54,6 +70,18 @@ export async function POST(req: NextRequest) {
 
     if (!workspaceId || !file) {
       return NextResponse.json({ error: 'workspaceId and file are required' }, { status: 400 });
+    }
+
+    if (workspaceId === 'ALL_CLIENTS') {
+      return NextResponse.json({ error: 'Cannot upload media with ALL_CLIENTS workspace selector' }, { status: 400 });
+    }
+
+    if (!file.type || !ALLOWED_MIME_TYPES.has(file.type)) {
+      return NextResponse.json({ error: 'Invalid file type. Allowed types are images and videos.' }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json({ error: 'File size exceeds maximum allowed limit of 50MB' }, { status: 400 });
     }
 
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);

@@ -4,9 +4,13 @@ import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { enqueuePublicationJob } from '@/modules/publishing/QueueService';
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to process approvals' }, { status: 403 });
   }
 
   try {
