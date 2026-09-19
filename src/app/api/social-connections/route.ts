@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getSession, validateWorkspaceAccess } from '@/lib/auth';
+import { getSession, validateWorkspaceAccess, validateWorkspaceMutationAccess } from '@/lib/auth';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 import { encryptToken } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -75,9 +75,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
   }
 
   try {
@@ -87,10 +91,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
     }
 
-    const { hasAccess, workspace } = await validateWorkspaceAccess(session, workspaceId, prisma);
-    if (!hasAccess || !workspace) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const mutationCheck = await validateWorkspaceMutationAccess(session, workspaceId, prisma);
+    if (!mutationCheck.hasAccess || !mutationCheck.workspace) {
+      return NextResponse.json(
+        { error: mutationCheck.error || 'Forbidden' },
+        { status: mutationCheck.error?.includes('ALL_CLIENTS') ? 400 : 403 }
+      );
     }
+
+    const workspace = mutationCheck.workspace;
 
     const provider = SocialProviderFactory.getProvider(platform);
     const capabilities = provider.getCapabilities();
@@ -135,9 +144,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
   }
 
   try {

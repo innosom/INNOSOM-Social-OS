@@ -9,7 +9,7 @@
     "worker": "tsx src/worker.ts",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "tsx tests/encryption.test.ts && tsx tests/publishing.test.ts"
+    "test": "tsx tests/run-all.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

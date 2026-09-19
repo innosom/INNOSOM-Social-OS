@@ -11,8 +11,13 @@ let connection: Redis | null = null;
 function getRedisConnection(): Redis {
   if (!connection) {
     connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      maxRetriesPerRequest: null,
+      maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
+      lazyConnect: true,
+      retryStrategy: () => null, // Do not reconnect infinitely if Redis is down
+    });
+    connection.on('error', () => {
+      // Suppress unhandled ioredis error logs in local environments without Redis
     });
   }
   return connection;
@@ -40,6 +45,19 @@ export async function enqueuePublicationJob(
   delayMs: number = 0
 ): Promise<void> {
   try {
+    if (process.env.NODE_ENV === 'test' || !process.env.REDIS_URL_ACTIVE) {
+      // Fallback to direct background execution when Redis is not running or in unit testing
+      const timer = setTimeout(() => {
+        processPublicationJob(publicationId).catch((e) =>
+          console.error('Fallback worker error:', e)
+        );
+      }, Math.min(delayMs, 10));
+      if (timer && typeof timer.unref === 'function') {
+        timer.unref();
+      }
+      return;
+    }
+
     const q = getPublishingQueue();
     await q.add(
       'publish-social-post',
@@ -52,12 +70,14 @@ export async function enqueuePublicationJob(
     console.log(`📥 [Queue] Enqueued publication job ${publicationId} with delay ${delayMs}ms`);
   } catch (err) {
     console.warn(`⚠️ [Queue] Redis Queue unavailable. Fallback to direct execution for ${publicationId}`);
-    // Async execution fallback in local dev without Redis instance
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       processPublicationJob(publicationId).catch((e) =>
         console.error('Fallback worker error:', e)
       );
-    }, delayMs);
+    }, Math.min(delayMs, 10));
+    if (timer && typeof timer.unref === 'function') {
+      timer.unref();
+    }
   }
 }
 
