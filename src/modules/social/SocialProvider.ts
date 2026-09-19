@@ -8,6 +8,8 @@ export interface SocialProviderCapabilities {
   supportsShorts: boolean;
   supportsAnalytics: boolean;
   maxCaptionLength: number;
+  supportedMediaTypes: ('image' | 'video')[];
+  maxMediaCount: number;
 }
 
 export interface EncryptedCredentials {
@@ -29,6 +31,7 @@ export interface PublishResult {
   publishedUrl?: string;
   error?: string;
   isRetriable?: boolean;
+  errorCode?: string;
 }
 
 export interface ConnectionStatusResult {
@@ -36,9 +39,19 @@ export interface ConnectionStatusResult {
   errorMessage?: string;
 }
 
+export interface RefreshTokenResult {
+  success: boolean;
+  accessTokenEnc?: string;
+  refreshTokenEnc?: string | null;
+  expiresAt?: Date | null;
+  error?: string;
+}
+
 export interface SocialProvider {
   getCapabilities(): SocialProviderCapabilities;
   validateConnection(credentials: EncryptedCredentials): Promise<ConnectionStatusResult>;
+  refreshCredentials?(credentials: EncryptedCredentials): Promise<RefreshTokenResult>;
+  revokeCredentials?(credentials: EncryptedCredentials): Promise<boolean>;
   publish(
     variant: PublishVariantPayload,
     credentials: EncryptedCredentials,

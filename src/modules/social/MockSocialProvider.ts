@@ -26,6 +26,8 @@ export class MockSocialProvider implements SocialProvider {
       supportsShorts: true,
       supportsAnalytics: true,
       maxCaptionLength: 2200,
+      supportedMediaTypes: ['image', 'video'],
+      maxMediaCount: 10,
     };
   }
 

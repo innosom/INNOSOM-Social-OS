@@ -20,6 +20,8 @@ export class InstagramProvider implements SocialProvider {
       supportsShorts: false,
       supportsAnalytics: true,
       maxCaptionLength: 2200,
+      supportedMediaTypes: ['image', 'video'],
+      maxMediaCount: 10,
     };
   }
 
@@ -31,7 +33,36 @@ export class InstagramProvider implements SocialProvider {
         errorMessage: 'Instagram Graph API access token expired. Please re-authenticate.',
       };
     }
-    return { status: 'CONNECTED' };
+
+    if (accessToken.startsWith('mock_') || accessToken.startsWith('enc_token_mock_')) {
+      return { status: 'CONNECTED' };
+    }
+
+    try {
+      const url = `https://graph.facebook.com/v20.0/me?access_token=${encodeURIComponent(accessToken)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.error) {
+        if (data.error.code === 190) {
+          return {
+            status: 'EXPIRED',
+            errorMessage: 'Instagram access token has expired or session was revoked.',
+          };
+        }
+        return {
+          status: 'REVOKED',
+          errorMessage: data.error.message || 'Instagram account access token revoked.',
+        };
+      }
+
+      return { status: 'CONNECTED' };
+    } catch (err: any) {
+      return {
+        status: 'ERROR',
+        errorMessage: err.message || 'Network failure validating Instagram connection.',
+      };
+    }
   }
 
   async publish(
@@ -43,8 +74,9 @@ export class InstagramProvider implements SocialProvider {
     if (health.status !== 'CONNECTED') {
       return {
         success: false,
-        error: health.errorMessage,
+        error: health.errorMessage || 'Instagram connection is not active.',
         isRetriable: false,
+        errorCode: health.status,
       };
     }
 
@@ -52,46 +84,133 @@ export class InstagramProvider implements SocialProvider {
       const accessToken = decryptToken(credentials.accessTokenEnc);
       const igAccountId = variant.metadata?.igAccountId || 'me';
       const fullCaption = `${variant.caption}\n\n${variant.hashtags.join(' ')}`.trim();
-      const imageUrl = variant.mediaUrls[0] || 'https://images.unsplash.com/photo-1542744094-3a3172720249?w=800';
+      const mediaUrls = variant.mediaUrls || [];
 
-      // Step 1: Create Media Container
-      const containerUrl = `https://graph.facebook.com/v20.0/${igAccountId}/media`;
-      const containerRes = await fetch(containerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image_url: imageUrl,
-          caption: fullCaption,
-          access_token: accessToken,
-        }),
-      });
-
-      const containerData = await containerRes.json();
-      if (containerData.error) {
+      // Instagram REQUIRES at least 1 media item (image or video)
+      if (mediaUrls.length === 0) {
         return {
           success: false,
-          error: containerData.error.message || 'Failed to create Instagram media container.',
-          isRetriable: containerData.error.code === 4 || containerData.error.code === 17,
+          error: 'Instagram requires at least one image or video media URL to publish.',
+          isRetriable: false,
+          errorCode: 'MISSING_REQUIRED_MEDIA',
         };
       }
 
+      if (mediaUrls.length > 10) {
+        return {
+          success: false,
+          error: 'Instagram carousel posts support a maximum of 10 media items.',
+          isRetriable: false,
+          errorCode: 'INVALID_MEDIA_COUNT',
+        };
+      }
+
+      let creationId = '';
+
+      if (mediaUrls.length > 1) {
+        // Carousel Container Flow
+        const childrenContainerIds: string[] = [];
+        for (const url of mediaUrls) {
+          const isVideo = url.match(/\.(mp4|mov)$/i);
+          const childRes = await fetch(`https://graph.facebook.com/v20.0/${igAccountId}/media`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              is_carousel_item: true,
+              [isVideo ? 'video_url' : 'image_url']: url,
+              access_token: accessToken,
+            }),
+          });
+          const childData = await childRes.json();
+          if (childData.error) {
+            const isRateLimit = [4, 17, 32].includes(childData.error.code);
+            return {
+              success: false,
+              error: childData.error.message || 'Failed to create Instagram carousel item container.',
+              isRetriable: isRateLimit,
+              errorCode: `IG_ERR_${childData.error.code}`,
+            };
+          }
+          childrenContainerIds.push(childData.id);
+        }
+
+        // Parent Carousel Container
+        const carouselRes = await fetch(`https://graph.facebook.com/v20.0/${igAccountId}/media`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            media_type: 'CAROUSEL',
+            caption: fullCaption,
+            children: childrenContainerIds,
+            access_token: accessToken,
+          }),
+        });
+        const carouselData = await carouselRes.json();
+        if (carouselData.error) {
+          const isRateLimit = [4, 17, 32].includes(carouselData.error.code);
+          return {
+            success: false,
+            error: carouselData.error.message || 'Failed to create Instagram carousel container.',
+            isRetriable: isRateLimit,
+            errorCode: `IG_ERR_${carouselData.error.code}`,
+          };
+        }
+        creationId = carouselData.id;
+      } else {
+        // Single Media Container (IMAGE, REELS, or VIDEO)
+        const mediaUrl = mediaUrls[0];
+        const isVideo = mediaUrl.match(/\.(mp4|mov)$/i) || variant.metadata?.isVideo;
+        const isReel = variant.metadata?.isReel || isVideo;
+
+        const body: any = {
+          caption: fullCaption,
+          access_token: accessToken,
+        };
+
+        if (isVideo || isReel) {
+          body.media_type = 'REELS';
+          body.video_url = mediaUrl;
+        } else {
+          body.image_url = mediaUrl;
+        }
+
+        const containerRes = await fetch(`https://graph.facebook.com/v20.0/${igAccountId}/media`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        const containerData = await containerRes.json();
+        if (containerData.error) {
+          const isRateLimit = [4, 17, 32].includes(containerData.error.code);
+          return {
+            success: false,
+            error: containerData.error.message || 'Failed to create Instagram media container.',
+            isRetriable: isRateLimit,
+            errorCode: `IG_ERR_${containerData.error.code}`,
+          };
+        }
+        creationId = containerData.id;
+      }
+
       // Step 2: Publish Container
-      const publishUrl = `https://graph.facebook.com/v20.0/${igAccountId}/media_publish`;
-      const publishRes = await fetch(publishUrl, {
+      const publishRes = await fetch(`https://graph.facebook.com/v20.0/${igAccountId}/media_publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          creation_id: containerData.id,
+          creation_id: creationId,
           access_token: accessToken,
         }),
       });
 
       const publishData = await publishRes.json();
       if (publishData.error) {
+        const isRateLimit = [4, 17, 32].includes(publishData.error.code);
         return {
           success: false,
           error: publishData.error.message || 'Failed to publish Instagram media container.',
-          isRetriable: publishData.error.code === 4 || publishData.error.code === 17,
+          isRetriable: isRateLimit,
+          errorCode: `IG_ERR_${publishData.error.code}`,
         };
       }
 
@@ -105,6 +224,7 @@ export class InstagramProvider implements SocialProvider {
         success: false,
         error: err.message || 'Instagram Graph API publishing error.',
         isRetriable: true,
+        errorCode: 'NETWORK_TIMEOUT',
       };
     }
   }
