@@ -36,6 +36,11 @@ export interface ConnectionStatusResult {
   errorMessage?: string;
 }
 
+export interface ReconciliationResult {
+  published: boolean;
+  providerPostId?: string;
+}
+
 export interface SocialProvider {
   getCapabilities(): SocialProviderCapabilities;
   validateConnection(credentials: EncryptedCredentials): Promise<ConnectionStatusResult>;
@@ -44,4 +49,8 @@ export interface SocialProvider {
     credentials: EncryptedCredentials,
     idempotencyKey: string
   ): Promise<PublishResult>;
+  checkPostStatus?(
+    idempotencyKey: string,
+    credentials: EncryptedCredentials
+  ): Promise<ReconciliationResult>;
 }
