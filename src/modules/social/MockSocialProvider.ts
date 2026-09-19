@@ -54,7 +54,9 @@ export class MockSocialProvider implements SocialProvider {
       };
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    if (process.env.NODE_ENV !== 'test') {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
 
     if (idempotencyKey.includes('fail_once') && !idempotencyKey.includes('retried')) {
       return {

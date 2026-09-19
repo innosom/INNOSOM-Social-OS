@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -64,9 +64,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Read-only role' }, { status: 403 });
   }
 
   try {
@@ -84,9 +88,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required content parameters' }, { status: 400 });
     }
 
+    if (workspaceId === 'ALL_CLIENTS') {
+      return NextResponse.json({ error: 'Cannot create content with ALL_CLIENTS workspace selector' }, { status: 400 });
+    }
+
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Validate cross-workspace media asset references
+    const allMediaIds: string[] = [];
+    for (const p of platforms) {
+      if (p.mediaAssetIds && Array.isArray(p.mediaAssetIds)) {
+        allMediaIds.push(...p.mediaAssetIds);
+      }
+    }
+
+    if (allMediaIds.length > 0) {
+      const mediaAssets = await prisma.mediaAsset.findMany({
+        where: { id: { in: allMediaIds } },
+      });
+
+      if (mediaAssets.length !== new Set(allMediaIds).size) {
+        return NextResponse.json({ error: 'One or more media assets not found' }, { status: 400 });
+      }
+
+      const hasCrossWorkspaceMedia = mediaAssets.some((m) => m.workspaceId !== workspaceId);
+      if (hasCrossWorkspaceMedia) {
+        return NextResponse.json({ error: 'Forbidden: Cross-workspace media asset reference detected' }, { status: 400 });
+      }
     }
 
     const initialStatus = submitForApproval
