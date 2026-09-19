@@ -5,11 +5,13 @@ import {
   PublishVariantPayload,
   PublishResult,
   ConnectionStatusResult,
+  ReconciliationResult,
 } from './SocialProvider';
 import { decryptToken } from '@/lib/encryption';
 
 export class MockSocialProvider implements SocialProvider {
   private platformName: string;
+  private static createdPostsMap = new Map<string, string>();
 
   constructor(platformName: string) {
     this.platformName = platformName;
@@ -40,6 +42,19 @@ export class MockSocialProvider implements SocialProvider {
     return { status: 'CONNECTED' };
   }
 
+  async checkPostStatus(
+    idempotencyKey: string,
+    credentials: EncryptedCredentials
+  ): Promise<ReconciliationResult> {
+    if (MockSocialProvider.createdPostsMap.has(idempotencyKey)) {
+      return {
+        published: true,
+        providerPostId: MockSocialProvider.createdPostsMap.get(idempotencyKey),
+      };
+    }
+    return { published: false };
+  }
+
   async publish(
     variant: PublishVariantPayload,
     credentials: EncryptedCredentials,
@@ -54,19 +69,48 @@ export class MockSocialProvider implements SocialProvider {
       };
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    // Check reconciliation status
+    if (MockSocialProvider.createdPostsMap.has(idempotencyKey)) {
+      const providerPostId = MockSocialProvider.createdPostsMap.get(idempotencyKey)!;
+      return {
+        success: true,
+        providerPostId,
+        publishedUrl: `https://${this.platformName.toLowerCase()}.com/p/${providerPostId}`,
+      };
+    }
 
-    if (idempotencyKey.includes('fail_once') && !idempotencyKey.includes('retried')) {
+    if (idempotencyKey.includes('rate_limit') || (idempotencyKey.includes('fail_once') && !idempotencyKey.includes('retried'))) {
       return {
         success: false,
-        error: `${this.platformName} API rate limit exceeded. Retry queued.`,
+        error: `${this.platformName} API rate limit exceeded (HTTP 429). Retry queued.`,
         isRetriable: true,
+      };
+    }
+
+    if (idempotencyKey.includes('timeout_after_creation')) {
+      // Simulate post created externally before network timeout
+      const providerPostId = `${this.platformName.toLowerCase()}_post_timeout_${Date.now()}`;
+      MockSocialProvider.createdPostsMap.set(idempotencyKey, providerPostId);
+      return {
+        success: false,
+        error: `${this.platformName} provider HTTP connection timed out after request submission.`,
+        isRetriable: true,
+      };
+    }
+
+    if (idempotencyKey.includes('fatal_error')) {
+      return {
+        success: false,
+        error: `${this.platformName} API fatal validation error: Invalid payload parameters.`,
+        isRetriable: false,
       };
     }
 
     const providerPostId = `${this.platformName.toLowerCase()}_post_${Date.now()}_${Math.floor(
       Math.random() * 10000
     )}`;
+
+    MockSocialProvider.createdPostsMap.set(idempotencyKey, providerPostId);
 
     return {
       success: true,
