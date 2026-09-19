@@ -4,12 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npm run db:generate && next build",
     "start": "next start",
     "worker": "tsx src/worker.ts",
-    "db:push": "prisma db push",
+    "db:push": "prisma generate --schema=prisma/schema.sqlite.prisma && prisma db push --schema=prisma/schema.sqlite.prisma",
+    "db:push:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma && prisma db push --schema=prisma/schema.sqlite.prisma",
+    "db:push:pg": "prisma generate --schema=prisma/schema.prisma && prisma db push --schema=prisma/schema.prisma",
+    "db:migrate:dev": "prisma generate --schema=prisma/schema.prisma && prisma migrate dev --schema=prisma/schema.prisma",
+    "db:migrate:deploy": "prisma generate --schema=prisma/schema.prisma && prisma migrate deploy --schema=prisma/schema.prisma",
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:generate:sqlite": "prisma generate --schema=prisma/schema.sqlite.prisma",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "tsx tests/encryption.test.ts && tsx tests/publishing.test.ts"
+    "test": "tsx tests/encryption.test.ts && tsx tests/publishing.test.ts && tsx tests/postgres_e2e.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

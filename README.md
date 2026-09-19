@@ -28,7 +28,15 @@
 
 ---
 
-## Local Development & Setup
+## Database Configuration & Dual-Database Strategy
+
+INNOSOM Social OS supports a dual-database architecture:
+- **Local Development**: Lightweight SQLite database (`dev.db`) using `prisma/schema.sqlite.prisma`.
+- **Production**: Enterprise-grade PostgreSQL database using version-controlled Prisma migrations via `prisma/schema.prisma` (`prisma/migrations/`).
+
+---
+
+## Local Development & Setup (SQLite)
 
 ### Prerequisites
 - Node.js 18+ or 20+
@@ -42,13 +50,14 @@
    ```
 
 2. **Environment Variables**:
-   Ensure `.env` is populated (copy from `.env.example` if needed):
+   Ensure `.env` is populated (copied from `.env.example`):
    ```env
    DATABASE_URL="file:./dev.db"
    JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
+   ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
    ```
 
-3. **Initialize Database & Seed Data**:
+3. **Initialize SQLite Database & Seed Data**:
    ```bash
    npm run db:push
    npm run db:seed
@@ -69,3 +78,55 @@
    ```bash
    npm test
    ```
+
+---
+
+## Production Deployment & PostgreSQL Migration Strategy
+
+In production environments, PostgreSQL is used for high concurrency, durability, and robust indexing.
+
+### 1. Environment Configuration
+
+Set `DATABASE_URL` in your production environment to point to your PostgreSQL instance:
+```env
+DATABASE_URL="postgresql://<username>:<password>@<host>:<port>/<database_name>?schema=public"
+JWT_SECRET="<your-secure-production-32+character-jwt-secret>"
+ENCRYPTION_KEY="<your-64-character-hex-encryption-key>"
+REDIS_URL="redis://<host>:<port>"
+```
+
+### 2. Database Initialization & Migration (Automated)
+
+A fresh PostgreSQL instance can be initialized directly from the repo using standard Prisma migrations:
+
+```bash
+# Generate Prisma client for PostgreSQL schema
+npm run db:generate
+
+# Deploy versioned database migrations to PostgreSQL
+npm run db:migrate:deploy
+
+# Seed initial organization, accounts, and client workspaces
+npm run db:seed
+```
+
+### 3. Creating New Schema Migrations (Development Mode)
+
+When making schema changes for production:
+```bash
+# Connect to development PostgreSQL instance and create a migration file
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/innosom_dev" npm run db:migrate:dev
+```
+
+### 4. Build & Start Production Services
+
+```bash
+# Build Next.js application (runs db:generate automatically)
+npm run build
+
+# Start Next.js App Server
+npm run start
+
+# Start Async Background Publishing Worker in parallel process
+npm run worker
+```
