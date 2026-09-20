@@ -100,10 +100,15 @@ async function runEncryptionTests() {
     const sensitiveToken = 'live_production_meta_graph_api_token_12345';
     const encryptedForDb = encryptToken(sensitiveToken)!;
 
-    // Find test workspace
-    const workspace = await prisma.workspace.findFirst();
+    // Find test workspace or create temporary test workspace
+    let workspace = await prisma.workspace.findFirst();
     if (!workspace) {
-      throw new Error('No workspace found in DB to perform persistence test.');
+      const testOrg = await prisma.organization.create({
+        data: { name: 'Test Org', slug: `test-org-${Date.now()}` },
+      });
+      workspace = await prisma.workspace.create({
+        data: { organizationId: testOrg.id, name: 'Test Workspace', slug: 'test-workspace' },
+      });
     }
 
     const createdConn = await prisma.socialConnection.create({
