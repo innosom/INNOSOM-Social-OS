@@ -7,25 +7,48 @@ import { MockSocialProvider } from './MockSocialProvider';
 
 export class SocialProviderFactory {
   static getProvider(platform: string): SocialProvider {
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.ENABLE_LIVE_SOCIAL_APIS === 'true';
+    const isProductionMode = process.env.ENABLE_LIVE_SOCIAL_APIS === 'true' || process.env.NODE_ENV === 'production';
 
-    switch (platform.toUpperCase()) {
+    const normalizedPlatform = platform.toUpperCase();
+
+    if (isProductionMode) {
+      switch (normalizedPlatform) {
+        case 'FACEBOOK':
+          if (!process.env.FACEBOOK_APP_ID || !process.env.FACEBOOK_APP_SECRET) {
+            throw new Error('Production Configuration Error: Missing FACEBOOK_APP_ID or FACEBOOK_APP_SECRET environment variables.');
+          }
+          return new FacebookProvider();
+
+        case 'INSTAGRAM':
+          if (!process.env.INSTAGRAM_APP_ID || !process.env.INSTAGRAM_APP_SECRET) {
+            throw new Error('Production Configuration Error: Missing INSTAGRAM_APP_ID or INSTAGRAM_APP_SECRET environment variables.');
+          }
+          return new InstagramProvider();
+
+        case 'TIKTOK':
+          if (!process.env.TIKTOK_APP_ID || !process.env.TIKTOK_APP_SECRET) {
+            throw new Error('Production Configuration Error: Missing TIKTOK_APP_ID or TIKTOK_APP_SECRET environment variables.');
+          }
+          return new TikTokProvider();
+
+        case 'YOUTUBE':
+          if (!process.env.YOUTUBE_CLIENT_ID || !process.env.YOUTUBE_CLIENT_SECRET) {
+            throw new Error('Production Configuration Error: Missing YOUTUBE_CLIENT_ID or YOUTUBE_CLIENT_SECRET environment variables.');
+          }
+          return new YouTubeProvider();
+
+        default:
+          throw new Error(`Production Configuration Error: Unsupported platform '${platform}'.`);
+      }
+    }
+
+    // Development & Test Mock Provider Fallback
+    switch (normalizedPlatform) {
       case 'FACEBOOK':
-        return isProduction && process.env.FACEBOOK_APP_ID
-          ? new FacebookProvider()
-          : new MockSocialProvider('Facebook');
       case 'INSTAGRAM':
-        return isProduction && process.env.INSTAGRAM_APP_ID
-          ? new InstagramProvider()
-          : new MockSocialProvider('Instagram');
       case 'TIKTOK':
-        return isProduction && process.env.TIKTOK_APP_ID
-          ? new TikTokProvider()
-          : new MockSocialProvider('TikTok');
       case 'YOUTUBE':
-        return isProduction && process.env.YOUTUBE_CLIENT_ID
-          ? new YouTubeProvider()
-          : new MockSocialProvider('YouTube');
+        return new MockSocialProvider(platform);
       default:
         return new MockSocialProvider(platform);
     }
