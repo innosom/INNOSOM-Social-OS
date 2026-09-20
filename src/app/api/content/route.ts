@@ -69,6 +69,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Viewers cannot create content' }, { status: 403 });
+  }
+
   try {
     const body = await req.json();
     const {
@@ -89,7 +93,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const initialStatus = submitForApproval
+    // Non-admin/manager roles (e.g. EDITOR, CLIENT) cannot bypass approval by scheduling directly.
+    const requiresApproval = session.role !== 'ADMIN' && session.role !== 'MANAGER';
+    const initialStatus = submitForApproval || (scheduledAt && requiresApproval)
       ? 'IN_REVIEW'
       : scheduledAt
       ? 'SCHEDULED'

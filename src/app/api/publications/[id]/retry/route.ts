@@ -9,6 +9,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER' && session.role !== 'EDITOR') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to retry publication' }, { status: 403 });
+  }
+
   const { id } = await params;
 
   try {

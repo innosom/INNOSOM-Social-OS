@@ -9,6 +9,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER' && session.role !== 'CLIENT') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to approve content' }, { status: 403 });
+  }
+
   try {
     const { contentId, action, comment } = await req.json();
 
