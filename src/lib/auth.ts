@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import type { NextRequest } from 'next/server';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
@@ -32,9 +33,26 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+export async function getSession(req?: NextRequest): Promise<SessionPayload | null> {
+  let token: string | undefined;
+  if (req) {
+    token = req.cookies.get(COOKIE_NAME)?.value;
+    if (!token) {
+      const cookieHeader = req.headers.get('cookie');
+      if (cookieHeader) {
+        const match = cookieHeader.match(new RegExp(`(?:^|; )${COOKIE_NAME}=([^;]*)`));
+        if (match) token = match[1];
+      }
+    }
+  }
+  if (!token) {
+    try {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value;
+    } catch {
+      token = undefined;
+    }
+  }
   if (!token) return null;
   return verifySessionToken(token);
 }

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -120,13 +120,25 @@ export async function POST(req: NextRequest) {
       });
 
       if (p.mediaAssetIds && p.mediaAssetIds.length > 0) {
-        await prisma.contentVariantMedia.createMany({
-          data: p.mediaAssetIds.map((mId: string, idx: number) => ({
-            contentVariantId: variant.id,
-            mediaAssetId: mId,
-            order: idx,
-          })),
+        const validAssets = await prisma.mediaAsset.findMany({
+          where: {
+            id: { in: p.mediaAssetIds },
+            workspaceId,
+          },
+          select: { id: true },
         });
+        const validIds = new Set(validAssets.map((m) => m.id));
+        const filteredMediaIds = p.mediaAssetIds.filter((mId: string) => validIds.has(mId));
+
+        if (filteredMediaIds.length > 0) {
+          await prisma.contentVariantMedia.createMany({
+            data: filteredMediaIds.map((mId: string, idx: number) => ({
+              contentVariantId: variant.id,
+              mediaAssetId: mId,
+              order: idx,
+            })),
+          });
+        }
       }
 
       const connection = socialConnections.find((c) => c.platform === p.platform);
