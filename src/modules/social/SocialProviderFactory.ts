@@ -11,22 +11,41 @@ export class SocialProviderFactory {
 
     switch (platform.toUpperCase()) {
       case 'FACEBOOK':
-        return isProduction && process.env.FACEBOOK_APP_ID
-          ? new FacebookProvider()
-          : new MockSocialProvider('Facebook');
+        if (isProduction) {
+          if (!process.env.FACEBOOK_APP_ID) {
+            throw new Error('Production Configuration Error: Missing FACEBOOK_APP_ID environment variable.');
+          }
+          return new FacebookProvider();
+        }
+        return new MockSocialProvider('Facebook');
       case 'INSTAGRAM':
-        return isProduction && process.env.INSTAGRAM_APP_ID
-          ? new InstagramProvider()
-          : new MockSocialProvider('Instagram');
+        if (isProduction) {
+          if (!process.env.INSTAGRAM_APP_ID) {
+            throw new Error('Production Configuration Error: Missing INSTAGRAM_APP_ID environment variable.');
+          }
+          return new InstagramProvider();
+        }
+        return new MockSocialProvider('Instagram');
       case 'TIKTOK':
-        return isProduction && process.env.TIKTOK_APP_ID
-          ? new TikTokProvider()
-          : new MockSocialProvider('TikTok');
+        if (isProduction) {
+          if (!process.env.TIKTOK_APP_ID) {
+            throw new Error('Production Configuration Error: Missing TIKTOK_APP_ID environment variable.');
+          }
+          return new TikTokProvider();
+        }
+        return new MockSocialProvider('TikTok');
       case 'YOUTUBE':
-        return isProduction && process.env.YOUTUBE_CLIENT_ID
-          ? new YouTubeProvider()
-          : new MockSocialProvider('YouTube');
+        if (isProduction) {
+          if (!process.env.YOUTUBE_CLIENT_ID) {
+            throw new Error('Production Configuration Error: Missing YOUTUBE_CLIENT_ID environment variable.');
+          }
+          return new YouTubeProvider();
+        }
+        return new MockSocialProvider('YouTube');
       default:
+        if (isProduction) {
+          throw new Error(`Production Configuration Error: Platform ${platform} is not supported in live mode.`);
+        }
         return new MockSocialProvider(platform);
     }
   }

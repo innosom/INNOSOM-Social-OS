@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role === 'VIEWER') {
+    return NextResponse.json({ error: 'Forbidden: Viewers cannot upload media assets' }, { status: 403 });
+  }
+
   try {
     const formData = await req.formData();
     const workspaceId = formData.get('workspaceId') as string;
