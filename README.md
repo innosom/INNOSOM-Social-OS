@@ -69,3 +69,14 @@
    ```bash
    npm test
    ```
+
+---
+
+## Production Deployment & Database Management
+
+For production PostgreSQL configuration, migration strategy, and deployment instructions, see the [Deployment Guide](docs/DEPLOYMENT.md).
+
+### Quick Production Database Commands
+- **Deploy Migrations**: `npm run db:migrate:deploy`
+- **Generate Client**: `npm run db:generate`
+- **Seed Initial Data**: `npm run db:seed`
