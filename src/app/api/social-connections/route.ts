@@ -5,7 +5,7 @@ import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 import { encryptToken } from '@/lib/encryption';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -75,9 +75,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to add social connection' }, { status: 403 });
   }
 
   try {
@@ -85,6 +89,11 @@ export async function POST(req: NextRequest) {
 
     if (!workspaceId || !platform || !accountName || !accountId) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
+
+    const isLiveApis = process.env.ENABLE_LIVE_SOCIAL_APIS === 'true' || process.env.NODE_ENV === 'production';
+    if (isLiveApis && !accessToken) {
+      return NextResponse.json({ error: 'Production Error: accessToken is required for social connection' }, { status: 400 });
     }
 
     const { hasAccess, workspace } = await validateWorkspaceAccess(session, workspaceId, prisma);
@@ -135,9 +144,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to remove social connection' }, { status: 403 });
   }
 
   try {

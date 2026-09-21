@@ -4,9 +4,13 @@ import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { enqueuePublicationJob } from '@/modules/publishing/QueueService';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to trigger immediate publishing' }, { status: 403 });
   }
 
   const { id } = await params;
@@ -16,6 +20,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { id },
       include: {
         socialConnection: true,
+        contentVariant: {
+          include: { content: true },
+        },
       },
     });
 
@@ -31,6 +38,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const parentStatus = publication.contentVariant.content.status;
+    if (parentStatus !== 'APPROVED' && parentStatus !== 'SCHEDULED' && parentStatus !== 'PUBLISHED') {
+      return NextResponse.json({ error: 'Forbidden: Cannot trigger publish on unapproved or draft content' }, { status: 403 });
     }
 
     // Enqueue non-blocking job

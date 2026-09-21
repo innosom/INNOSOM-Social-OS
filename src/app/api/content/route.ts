@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -87,6 +87,25 @@ export async function POST(req: NextRequest) {
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Collect and validate all attached mediaAssetIds to ensure they belong to target workspaceId
+    const requestedMediaIds = platforms.flatMap((p: any) => p.mediaAssetIds || []).filter(Boolean);
+    if (requestedMediaIds.length > 0) {
+      const validMediaAssets = await prisma.mediaAsset.findMany({
+        where: {
+          id: { in: requestedMediaIds },
+          workspaceId,
+        },
+        select: { id: true },
+      });
+      const validMediaIdSet = new Set(validMediaAssets.map((m) => m.id));
+      if (validMediaIdSet.size !== new Set(requestedMediaIds).size) {
+        return NextResponse.json(
+          { error: 'Forbidden: One or more media assets do not belong to the target workspace' },
+          { status: 403 }
+        );
+      }
     }
 
     const initialStatus = submitForApproval

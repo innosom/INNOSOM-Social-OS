@@ -37,14 +37,23 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
     return { success: true };
   }
 
-  await prisma.publication.update({
-    where: { id: publicationId },
+  // Atomic transition check to prevent concurrent worker race conditions
+  const updatedCount = await prisma.publication.updateMany({
+    where: {
+      id: publicationId,
+      status: { in: ['SCHEDULED', 'FAILED'] },
+    },
     data: {
       status: 'PUBLISHING',
       lastAttemptAt: new Date(),
       attempts: { increment: 1 },
     },
   });
+
+  if (updatedCount.count === 0) {
+    console.warn(`⚠️ [Worker] Publication ${publicationId} is not in SCHEDULED or FAILED status (likely already being published). Aborting job.`);
+    return { success: true };
+  }
 
   try {
     const provider = SocialProviderFactory.getProvider(publication.socialConnection.platform);

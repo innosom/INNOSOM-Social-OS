@@ -4,9 +4,13 @@ import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { enqueuePublicationJob } from '@/modules/publishing/QueueService';
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to approve content' }, { status: 403 });
   }
 
   try {
@@ -33,6 +37,10 @@ export async function POST(req: NextRequest) {
     const { hasAccess } = await validateWorkspaceAccess(session, content.workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (content.status === 'PUBLISHED') {
+      return NextResponse.json({ error: 'Conflict: Cannot alter approval status of already published content' }, { status: 409 });
     }
 
     const newStatus = action === 'APPROVE' ? 'APPROVED' : 'DRAFT';

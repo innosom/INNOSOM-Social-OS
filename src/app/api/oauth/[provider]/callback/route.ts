@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { encryptToken } from '@/lib/encryption';
+import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 
 export async function GET(
@@ -37,6 +38,18 @@ export async function GET(
   const cookieNonce = req.cookies.get(`oauth_state_${provider}`)?.value;
   if (!cookieNonce || cookieNonce !== parsedState.nonce) {
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth CSRF state verification failed.')}`);
+  }
+
+  // Ensure active session exists and belongs to the user initiating OAuth workflow
+  const session = await getSession(req);
+  if (!session || session.userId !== parsedState.userId) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Unauthorized OAuth callback user context.')}`);
+  }
+
+  // Validate workspace access for the authenticated session user
+  const { hasAccess } = await validateWorkspaceAccess(session, parsedState.workspaceId, prisma);
+  if (!hasAccess) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Forbidden workspace access for social account binding.')}`);
   }
 
   try {
