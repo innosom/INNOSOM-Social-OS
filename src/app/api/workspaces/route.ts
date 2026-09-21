@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -51,7 +51,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Workspace name is required' }, { status: 400 });
     }
 
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const slug = baseSlug || `workspace-${Date.now()}`;
+
+    const existingWorkspace = await prisma.workspace.findUnique({
+      where: {
+        organizationId_slug: {
+          organizationId: session.organizationId,
+          slug,
+        },
+      },
+    });
+
+    if (existingWorkspace) {
+      return NextResponse.json({ error: 'Conflict: A workspace with this name already exists in the organization' }, { status: 400 });
+    }
 
     const workspace = await prisma.workspace.create({
       data: {

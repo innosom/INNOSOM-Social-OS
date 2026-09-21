@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import path from 'path';
 import { prisma } from '@/lib/prisma';
 import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const workspaceId = formData.get('workspaceId') as string;
     const file = formData.get('file') as File | null;
-    const folderPath = (formData.get('folderPath') as string) || '/';
+    const rawFolderPath = (formData.get('folderPath') as string) || '/';
 
     if (!workspaceId || !file) {
       return NextResponse.json({ error: 'workspaceId and file are required' }, { status: 400 });
@@ -60,6 +61,11 @@ export async function POST(req: NextRequest) {
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    // Sanitize file name and folder path against directory traversal
+    const safeFileName = path.basename(file.name);
+    const sanitizedFolder = path.normalize(rawFolderPath).replace(/^(\.\.[\/\\])+/, '');
+    const safeFolderPath = sanitizedFolder.startsWith('/') ? sanitizedFolder : `/${sanitizedFolder}`;
 
     const isVideo = file.type.startsWith('video/');
     const sampleUrls = isVideo
@@ -77,12 +83,12 @@ export async function POST(req: NextRequest) {
     const mediaAsset = await prisma.mediaAsset.create({
       data: {
         workspaceId,
-        fileName: file.name,
+        fileName: safeFileName,
         fileSize: file.size,
         mimeType: file.type || 'application/octet-stream',
-        storageKey: `workspaces/${workspaceId}/${Date.now()}-${file.name}`,
+        storageKey: `workspaces/${workspaceId}/${Date.now()}-${safeFileName}`,
         publicUrl,
-        folderPath,
+        folderPath: safeFolderPath,
         width: isVideo ? 1080 : 1200,
         height: isVideo ? 1920 : 630,
         duration: isVideo ? 30 : null,

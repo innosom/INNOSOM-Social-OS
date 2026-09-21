@@ -1,9 +1,16 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import type { NextRequest } from 'next/server';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
-);
+const DEFAULT_JWT_SECRET = 'innosom-super-secret-jwt-encryption-key-32-bytes!!';
+
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (process.env.NODE_ENV === 'production' && (!secret || secret === DEFAULT_JWT_SECRET)) {
+    throw new Error('Production Configuration Error: JWT_SECRET environment variable is missing or set to default value.');
+  }
+  return new TextEncoder().encode(secret || DEFAULT_JWT_SECRET);
+}
 
 export interface SessionPayload {
   userId: string;
@@ -16,25 +23,46 @@ export interface SessionPayload {
 const COOKIE_NAME = 'innosom_session';
 
 export async function signSessionToken(payload: SessionPayload): Promise<string> {
+  const secret = getJwtSecret();
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
-    .sign(JWT_SECRET);
+    .sign(secret);
 }
 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
-    const verified = await jwtVerify(token, JWT_SECRET);
+    const secret = getJwtSecret();
+    const verified = await jwtVerify(token, secret);
     return verified.payload as unknown as SessionPayload;
   } catch (error) {
     return null;
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+export async function getSession(req?: NextRequest): Promise<SessionPayload | null> {
+  let token: string | undefined;
+
+  if (req) {
+    token = req.cookies.get(COOKIE_NAME)?.value;
+    if (!token) {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+  }
+
+  if (!token) {
+    try {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value;
+    } catch {
+      // Out of Next.js request context
+    }
+  }
+
   if (!token) return null;
   return verifySessionToken(token);
 }
