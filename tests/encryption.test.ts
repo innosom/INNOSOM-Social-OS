@@ -100,10 +100,24 @@ async function runEncryptionTests() {
     const sensitiveToken = 'live_production_meta_graph_api_token_12345';
     const encryptedForDb = encryptToken(sensitiveToken)!;
 
-    // Find test workspace
-    const workspace = await prisma.workspace.findFirst();
+    // Find or create test workspace
+    let workspace = await prisma.workspace.findFirst();
+    let tempOrg: any = null;
     if (!workspace) {
-      throw new Error('No workspace found in DB to perform persistence test.');
+      tempOrg = await prisma.organization.create({
+        data: {
+          name: 'Temp Encryption Test Org',
+          slug: `temp-enc-test-${Date.now()}`,
+          workspaces: {
+            create: {
+              name: 'Temp Encryption Workspace',
+              slug: 'temp-enc-ws',
+            },
+          },
+        },
+        include: { workspaces: true },
+      });
+      workspace = tempOrg.workspaces[0];
     }
 
     const createdConn = await prisma.socialConnection.create({
@@ -134,8 +148,11 @@ async function runEncryptionTests() {
       throw new Error('Persistence violation: Token in database is not stored in encrypted format.');
     }
 
-    // Clean up test connection
+    // Clean up test connection & tempOrg if created
     await prisma.socialConnection.delete({ where: { id: createdConn.id } });
+    if (tempOrg) {
+      await prisma.organization.delete({ where: { id: tempOrg.id } });
+    }
     console.log('✅ 5. Persistence security test passed (plaintext never stored).');
 
     // 6. Development mock credential preservation test

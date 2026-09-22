@@ -7,9 +7,11 @@
     "build": "next build",
     "start": "next start",
     "worker": "tsx src/worker.ts",
-    "db:push": "prisma db push",
+    "db:push": "prisma db push --schema=prisma/schema.sqlite.prisma",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "tsx tests/encryption.test.ts && tsx tests/publishing.test.ts && tsx tests/providers.test.ts"
+    "test": "tsx tests/encryption.test.ts && tsx tests/publishing.test.ts && tsx tests/providers.test.ts && tsx tests/postgres.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
