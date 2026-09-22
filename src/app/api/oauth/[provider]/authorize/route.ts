@@ -9,7 +9,7 @@ export async function GET(
 ) {
   const { provider: rawProvider } = await params;
   const provider = rawProvider.toLowerCase();
-  const session = await getSession();
+  const session = await getSession(req);
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
