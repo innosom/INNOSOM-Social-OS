@@ -67,6 +67,9 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
     );
 
     if (publishResult.success) {
+      const pubExists = await prisma.publication.findUnique({ where: { id: publicationId } });
+      if (!pubExists) return { success: false, error: 'Publication record no longer exists' };
+
       await prisma.publication.update({
         where: { id: publicationId },
         data: {
@@ -114,13 +117,17 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
   } catch (error: any) {
     console.error(`❌ [Worker] Fatal error executing publication ${publicationId}:`, error);
 
-    await prisma.publication.update({
-      where: { id: publicationId },
-      data: {
-        status: 'FAILED',
-        errorMessage: error.message || 'Worker unexpected execution error',
-      },
-    });
+    try {
+      await prisma.publication.update({
+        where: { id: publicationId },
+        data: {
+          status: 'FAILED',
+          errorMessage: error.message || 'Worker unexpected execution error',
+        },
+      });
+    } catch {
+      // Record was deleted during processing
+    }
 
     return { success: false, error: error.message };
   }

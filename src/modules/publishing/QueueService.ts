@@ -13,6 +13,8 @@ function getRedisConnection(): Redis {
     connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
       maxRetriesPerRequest: null,
       enableOfflineQueue: false,
+      connectTimeout: 1000,
+      retryStrategy: (times) => (times > 2 ? null : 100),
     });
   }
   return connection;

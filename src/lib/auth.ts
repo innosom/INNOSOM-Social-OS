@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import type { NextRequest } from 'next/server';
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
@@ -15,11 +16,11 @@ export interface SessionPayload {
 
 const COOKIE_NAME = 'innosom_session';
 
-export async function signSessionToken(payload: SessionPayload): Promise<string> {
+export async function signSessionToken(payload: SessionPayload, expiresIn: string = '7d'): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime(expiresIn)
     .sign(JWT_SECRET);
 }
 
@@ -32,23 +33,46 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+export async function getSession(req?: NextRequest): Promise<SessionPayload | null> {
+  let token: string | undefined;
+
+  if (req) {
+    token = req.cookies.get(COOKIE_NAME)?.value;
+    if (!token) {
+      const authHeader = req.headers.get('authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+      }
+    }
+  }
+
+  if (!token) {
+    try {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value;
+    } catch {
+      // outside Next.js request scope context
+    }
+  }
+
   if (!token) return null;
   return verifySessionToken(token);
 }
 
 export async function setSessionCookie(payload: SessionPayload): Promise<void> {
   const token = await signSessionToken(payload);
-  const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60,
-  });
+  try {
+    const cookieStore = await cookies();
+    cookieStore.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+  } catch {
+    // outside Next.js request scope context
+  }
 }
 
 export async function clearSessionCookie(): Promise<void> {
