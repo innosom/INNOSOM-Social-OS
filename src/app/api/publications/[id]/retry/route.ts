@@ -33,6 +33,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (publication.status === 'PUBLISHING' || publication.status === 'PUBLISHED') {
+      return NextResponse.json(
+        { error: `Cannot retry publication: current status is ${publication.status}` },
+        { status: 409 }
+      );
+    }
+
     // Reset status and idempotency key suffix for retry
     await prisma.publication.update({
       where: { id },

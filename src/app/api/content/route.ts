@@ -89,9 +89,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Enforce approval workflow: Editors or requests submitted for approval must go to IN_REVIEW.
+    // Only ADMIN/MANAGER can directly schedule without review.
+    const isElevatedUser = session.role === 'ADMIN' || session.role === 'MANAGER';
     const initialStatus = submitForApproval
       ? 'IN_REVIEW'
-      : scheduledAt
+      : (scheduledAt && !isElevatedUser)
+      ? 'IN_REVIEW'
+      : (scheduledAt && isElevatedUser)
       ? 'SCHEDULED'
       : 'DRAFT';
 

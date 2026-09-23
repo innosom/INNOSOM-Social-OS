@@ -56,11 +56,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'workspaceId and file are required' }, { status: 400 });
     }
 
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
+    ];
+
+    if (!allowedMimeTypes.includes(file.type)) {
+      return NextResponse.json(
+        { error: `Unsupported media file format: ${file.type}. Allowed types: images (JPEG, PNG, GIF, WebP) and videos (MP4, WebM, QuickTime).` },
+        { status: 400 }
+      );
+    }
+
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB limit
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: 'File size exceeds maximum allowed limit of 100MB.' },
+        { status: 400 }
+      );
+    }
+
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
     const isVideo = file.type.startsWith('video/');
     const sampleUrls = isVideo
       ? [
@@ -77,10 +103,10 @@ export async function POST(req: NextRequest) {
     const mediaAsset = await prisma.mediaAsset.create({
       data: {
         workspaceId,
-        fileName: file.name,
+        fileName: sanitizedFileName,
         fileSize: file.size,
         mimeType: file.type || 'application/octet-stream',
-        storageKey: `workspaces/${workspaceId}/${Date.now()}-${file.name}`,
+        storageKey: `workspaces/${workspaceId}/${Date.now()}-${sanitizedFileName}`,
         publicUrl,
         folderPath,
         width: isVideo ? 1080 : 1200,

@@ -1,9 +1,18 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
-);
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Startup error: JWT_SECRET environment variable is missing in production.');
+    }
+    return new TextEncoder().encode('innosom-super-secret-jwt-encryption-key-32-bytes!!');
+  }
+  return new TextEncoder().encode(secret);
+}
+
+const JWT_SECRET = getJwtSecret();
 
 export interface SessionPayload {
   userId: string;
