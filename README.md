@@ -43,16 +43,34 @@
 
 2. **Environment Variables**:
    Ensure `.env` is populated (copy from `.env.example` if needed):
+
+   **Local Development (SQLite - Default)**:
    ```env
    DATABASE_URL="file:./dev.db"
    JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
+   ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+   ```
+
+   **Production / Local PostgreSQL**:
+   ```env
+   DATABASE_URL="postgresql://user:password@localhost:5432/innosom_db?schema=public"
+   JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
+   ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
    ```
 
 3. **Initialize Database & Seed Data**:
-   ```bash
-   npm run db:push
-   npm run db:seed
-   ```
+
+   - **Local SQLite Development**:
+     ```bash
+     npm run db:push
+     npm run db:seed
+     ```
+
+   - **PostgreSQL Production / Staging Deployment**:
+     ```bash
+     npm run db:migrate:deploy
+     npm run db:seed
+     ```
 
 4. **Run Development Server**:
    ```bash
