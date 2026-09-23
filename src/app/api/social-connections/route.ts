@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ connections: evaluatedConnections });
   } catch (error: any) {
-    console.error('Fetch social connections error:', error.message || 'Unknown error');
+    console.error('Fetch social connections error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json({ error: 'Failed to fetch social connections' }, { status: 500 });
   }
 }
@@ -78,6 +78,10 @@ export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to modify social connections' }, { status: 403 });
   }
 
   try {
@@ -129,7 +133,7 @@ export async function POST(req: NextRequest) {
     const { accessTokenEnc, refreshTokenEnc, ...safeConnection } = connection;
     return NextResponse.json({ connection: safeConnection });
   } catch (error: any) {
-    console.error('Connect social account error:', error.message || 'Unknown error');
+    console.error('Connect social account error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json({ error: 'Failed to connect social account' }, { status: 500 });
   }
 }
@@ -138,6 +142,10 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to modify social connections' }, { status: 403 });
   }
 
   try {
@@ -185,7 +193,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
-    console.error('Disconnect social account error:', error.message || 'Unknown error');
+    console.error('Disconnect social account error:', error instanceof Error ? error.message : 'Unknown error');
     return NextResponse.json({ error: 'Failed to disconnect social account' }, { status: 500 });
   }
 }

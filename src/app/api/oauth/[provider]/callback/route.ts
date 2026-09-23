@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { encryptToken } from '@/lib/encryption';
+import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 
 export async function GET(
@@ -25,13 +27,36 @@ export async function GET(
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Missing authorization code or state parameter.')}`);
   }
 
-  // Validate state parameter and CSRF nonce cookie
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.redirect(`${baseUrl}/login?error=${encodeURIComponent('Unauthorized OAuth callback session.')}`);
+  }
+
+  // Validate state parameter HMAC-SHA256 signature and CSRF nonce cookie
   let parsedState: { workspaceId: string; provider: string; nonce: string; userId: string };
   try {
     const stateJson = Buffer.from(stateParam, 'base64url').toString('utf-8');
-    parsedState = JSON.parse(stateJson);
+    const { payload, sig } = JSON.parse(stateJson);
+
+    const secretKey = process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!';
+    const expectedSig = crypto.createHmac('sha256', secretKey).update(payload).digest('hex');
+
+    if (sig !== expectedSig) {
+      return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Invalid OAuth state signature.')}`);
+    }
+
+    parsedState = JSON.parse(payload);
   } catch {
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Invalid OAuth state parameter.')}`);
+  }
+
+  if (parsedState.userId !== session.userId) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth state user mismatch.')}`);
+  }
+
+  const { hasAccess } = await validateWorkspaceAccess(session, parsedState.workspaceId, prisma);
+  if (!hasAccess) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Forbidden workspace OAuth authorization.')}`);
   }
 
   const cookieNonce = req.cookies.get(`oauth_state_${provider}`)?.value;
@@ -169,6 +194,9 @@ export async function GET(
         }
       }
     } else {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('OAuth Error: Mock social provider flow disabled in production mode.');
+      }
       // Mock OAuth code exchange in non-production development mode
       accessToken = `mock_oauth_access_${provider}_${Date.now()}`;
       refreshToken = `mock_oauth_refresh_${provider}_${Date.now()}`;

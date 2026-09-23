@@ -8,6 +8,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to access audit logs' }, { status: 403 });
+  }
+
   const { searchParams } = new URL(req.url);
   const workspaceId = searchParams.get('workspaceId');
 
