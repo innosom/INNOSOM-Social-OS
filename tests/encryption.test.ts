@@ -1,3 +1,5 @@
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/postgres?schema=public';
+
 import { encryptToken, decryptToken, isMockToken, isEncryptedToken } from '../src/lib/encryption';
 import { prisma } from '../src/lib/prisma';
 
