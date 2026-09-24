@@ -49,10 +49,17 @@
    ```
 
 3. **Initialize Database & Seed Data**:
-   ```bash
-   npm run db:push
-   npm run db:seed
-   ```
+   - **Local SQLite Development**:
+     ```bash
+     npm run db:push
+     npm run db:seed
+     ```
+   - **Production PostgreSQL Deployment**:
+     ```bash
+     npm run db:migrate:deploy
+     npm run db:seed
+     ```
+   See [Database Deployment Guide](docs/DATABASE_DEPLOYMENT.md) for full configuration, pooling, SSL, and migration instructions.
 
 4. **Run Development Server**:
    ```bash

@@ -1,3 +1,5 @@
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/postgres?schema=public';
+
 import { processPublicationJob } from '../src/modules/publishing/PublishingWorker';
 import { prisma } from '../src/lib/prisma';
 
