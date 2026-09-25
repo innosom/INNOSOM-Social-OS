@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { encryptToken } from '@/lib/encryption';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 
@@ -37,6 +38,20 @@ export async function GET(
   const cookieNonce = req.cookies.get(`oauth_state_${provider}`)?.value;
   if (!cookieNonce || cookieNonce !== parsedState.nonce) {
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth CSRF state verification failed.')}`);
+  }
+
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.redirect(`${baseUrl}/login?error=${encodeURIComponent('Authentication required to complete OAuth flow.')}`);
+  }
+
+  const { hasAccess } = await validateWorkspaceAccess(session, parsedState.workspaceId, prisma);
+  if (!hasAccess) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Forbidden: You do not have access to this workspace.')}`);
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Forbidden: Insufficient permissions to connect social channels.')}`);
   }
 
   try {

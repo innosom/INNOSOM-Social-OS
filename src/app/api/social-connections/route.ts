@@ -80,11 +80,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
+  }
+
   try {
     const { workspaceId, platform, accountName, accountId, avatarUrl, accessToken, refreshToken } = await req.json();
 
-    if (!workspaceId || !platform || !accountName || !accountId) {
-      return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    if (!workspaceId || workspaceId === 'ALL_CLIENTS' || !platform || !accountName || !accountId) {
+      return NextResponse.json({ error: 'Missing or invalid parameters' }, { status: 400 });
     }
 
     const { hasAccess, workspace } = await validateWorkspaceAccess(session, workspaceId, prisma);
@@ -138,6 +142,10 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions' }, { status: 403 });
   }
 
   try {

@@ -35,6 +35,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to approve content' }, { status: 403 });
+    }
+
+    if (action === 'APPROVE' && content.status === 'PUBLISHED') {
+      return NextResponse.json({ error: 'Cannot approve content that is already published' }, { status: 400 });
+    }
+
     const newStatus = action === 'APPROVE' ? 'APPROVED' : 'DRAFT';
 
     const updatedContent = await prisma.content.update({

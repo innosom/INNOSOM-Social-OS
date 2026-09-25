@@ -32,19 +32,23 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
     return { success: false, error: 'Publication record not found' };
   }
 
-  if (publication.status === 'PUBLISHED') {
-    console.log(`ℹ️ [Worker] Publication ${publicationId} is already PUBLISHED. Skipping.`);
-    return { success: true };
-  }
-
-  await prisma.publication.update({
-    where: { id: publicationId },
+  // Atomic DB status transition from SCHEDULED/FAILED/APPROVED -> PUBLISHING to prevent worker race conditions
+  const updateResult = await prisma.publication.updateMany({
+    where: {
+      id: publicationId,
+      status: { in: ['SCHEDULED', 'FAILED', 'APPROVED'] },
+    },
     data: {
       status: 'PUBLISHING',
       lastAttemptAt: new Date(),
       attempts: { increment: 1 },
     },
   });
+
+  if (updateResult.count === 0) {
+    console.log(`ℹ️ [Worker] Publication ${publicationId} is already being processed or already published. Skipping execution.`);
+    return { success: true };
+  }
 
   try {
     const provider = SocialProviderFactory.getProvider(publication.socialConnection.platform);
