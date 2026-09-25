@@ -16,6 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { id },
       include: {
         socialConnection: true,
+        contentVariant: true,
       },
     });
 
@@ -31,6 +32,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to publish' }, { status: 403 });
+    }
+
+    const content = await prisma.content.findUnique({
+      where: { id: publication.contentVariant.contentId },
+    });
+
+    if (!content || (content.status !== 'APPROVED' && content.status !== 'SCHEDULED')) {
+      return NextResponse.json({ error: 'Cannot publish content that has not been approved' }, { status: 400 });
+    }
+
+    if (publication.status === 'PUBLISHED' || publication.status === 'PUBLISHING') {
+      return NextResponse.json({ error: `Publication is already ${publication.status.toLowerCase()}` }, { status: 400 });
     }
 
     // Enqueue non-blocking job

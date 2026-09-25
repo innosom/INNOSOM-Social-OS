@@ -52,14 +52,32 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File | null;
     const folderPath = (formData.get('folderPath') as string) || '/';
 
-    if (!workspaceId || !file) {
-      return NextResponse.json({ error: 'workspaceId and file are required' }, { status: 400 });
+    if (!workspaceId || workspaceId === 'ALL_CLIENTS' || !file) {
+      return NextResponse.json({ error: 'Missing or invalid workspaceId or file' }, { status: 400 });
     }
 
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
+
+    const allowedMimeTypes = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'video/mp4', 'video/quicktime', 'video/webm'
+    ];
+
+    if (!allowedMimeTypes.includes(file.type.toLowerCase())) {
+      return NextResponse.json({ error: 'Unsupported file type. Only images and videos are allowed' }, { status: 400 });
+    }
+
+    const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB limit
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File size exceeds maximum allowed limit of 100MB' }, { status: 400 });
+    }
+
+    // Sanitize folder path to prevent path traversal attacks
+    const sanitizedFolder = folderPath.replace(/\.\./g, '').replace(/[^a-zA-Z0-9_\-\/]/g, '');
+    const cleanFolderPath = sanitizedFolder.startsWith('/') ? sanitizedFolder : `/${sanitizedFolder}`;
 
     const isVideo = file.type.startsWith('video/');
     const sampleUrls = isVideo
@@ -82,7 +100,7 @@ export async function POST(req: NextRequest) {
         mimeType: file.type || 'application/octet-stream',
         storageKey: `workspaces/${workspaceId}/${Date.now()}-${file.name}`,
         publicUrl,
-        folderPath,
+        folderPath: cleanFolderPath,
         width: isVideo ? 1080 : 1200,
         height: isVideo ? 1920 : 630,
         duration: isVideo ? 30 : null,

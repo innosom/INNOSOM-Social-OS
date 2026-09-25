@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
       submitForApproval,
     } = body;
 
-    if (!workspaceId || !title || !masterCaption || !platforms || !Array.isArray(platforms)) {
-      return NextResponse.json({ error: 'Missing required content parameters' }, { status: 400 });
+    if (!workspaceId || workspaceId === 'ALL_CLIENTS' || !title || !masterCaption || !platforms || !Array.isArray(platforms)) {
+      return NextResponse.json({ error: 'Missing or invalid required content parameters' }, { status: 400 });
     }
 
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
@@ -120,6 +120,18 @@ export async function POST(req: NextRequest) {
       });
 
       if (p.mediaAssetIds && p.mediaAssetIds.length > 0) {
+        const validMediaAssets = await prisma.mediaAsset.findMany({
+          where: {
+            id: { in: p.mediaAssetIds },
+            workspaceId,
+          },
+          select: { id: true },
+        });
+
+        if (validMediaAssets.length !== p.mediaAssetIds.length) {
+          return NextResponse.json({ error: 'Unauthorized: Media asset does not belong to target workspace' }, { status: 403 });
+        }
+
         await prisma.contentVariantMedia.createMany({
           data: p.mediaAssetIds.map((mId: string, idx: number) => ({
             contentVariantId: variant.id,
