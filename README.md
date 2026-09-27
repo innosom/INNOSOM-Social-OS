@@ -26,6 +26,10 @@
    - States: `DRAFT`, `IN_REVIEW`, `APPROVED`, `SCHEDULED`, `PUBLISHING`, `PUBLISHED`, `FAILED`.
    - Immutable audit logging tracking all sensitive agency operational actions.
 
+6. **Dual Database & Production Migration Architecture**:
+   - **Production**: Managed PostgreSQL with versioned Prisma migrations, foreign key cascading rules, and query indexes optimized for background scheduling and audit logging at scale.
+   - **Development**: Preserves zero-dependency SQLite local development workflow.
+
 ---
 
 ## Local Development & Setup
@@ -34,7 +38,7 @@
 - Node.js 18+ or 20+
 - npm
 
-### Instructions
+### SQLite Local Development
 
 1. **Install Dependencies**:
    ```bash
@@ -46,6 +50,7 @@
    ```env
    DATABASE_URL="file:./dev.db"
    JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
+   ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
    ```
 
 3. **Initialize Database & Seed Data**:
@@ -65,7 +70,30 @@
    - Manager: `manager@innosom.com` / `Password123!`
    - Editor: `editor@innosom.com` / `Password123!`
 
-6. **Run Test Suite**:
-   ```bash
-   npm test
-   ```
+---
+
+## Production PostgreSQL Deployment
+
+### Database Commands
+
+| Script | Command | Purpose |
+|--------|---------|---------|
+| `npm run db:migrate:deploy` | `prisma migrate deploy --schema=prisma/schema.prisma` | Applies versioned PostgreSQL migrations in production. |
+| `npm run db:migrate:dev` | `prisma migrate dev --schema=prisma/schema.prisma` | Generates new PostgreSQL migration files during development. |
+| `npm run db:push` | `prisma db push --schema=prisma/schema.sqlite.prisma` | Local SQLite database schema sync. |
+| `npm run db:seed` | `tsx prisma/seed.ts` | Seeds initial workspaces, users, and social connections. |
+
+For detailed deployment instructions, indexing specs, and production architecture, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+---
+
+## Verification & Test Suite
+
+Run full automated test suite (includes encryption security, worker idempotency, social providers, and PostgreSQL verification suite):
+```bash
+npm test
+```
+Build production application:
+```bash
+npm run build
+```
