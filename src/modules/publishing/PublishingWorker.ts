@@ -37,14 +37,23 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
     return { success: true };
   }
 
-  await prisma.publication.update({
-    where: { id: publicationId },
+  // Atomic state claim to prevent worker race conditions
+  const claimed = await prisma.publication.updateMany({
+    where: {
+      id: publicationId,
+      status: { in: ['SCHEDULED', 'APPROVED', 'FAILED'] },
+    },
     data: {
       status: 'PUBLISHING',
       lastAttemptAt: new Date(),
       attempts: { increment: 1 },
     },
   });
+
+  if (claimed.count === 0) {
+    console.log(`⚠️ [Worker] Publication ${publicationId} was already claimed or is in non-claimable state (${publication.status}). Skipping.`);
+    return { success: true };
+  }
 
   try {
     const provider = SocialProviderFactory.getProvider(publication.socialConnection.platform);

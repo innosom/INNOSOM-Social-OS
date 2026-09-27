@@ -61,6 +61,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Enforce 100MB file size limit to prevent memory exhausted / DoS
+    const MAX_FILE_SIZE = 100 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File size exceeds maximum limit (100MB)' }, { status: 400 });
+    }
+
+    // Sanitize file name to prevent path traversal
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    const safeFolderPath = folderPath.replace(/\.\./g, '').replace(/\/{2,}/g, '/');
+
     const isVideo = file.type.startsWith('video/');
     const sampleUrls = isVideo
       ? [
@@ -77,12 +87,12 @@ export async function POST(req: NextRequest) {
     const mediaAsset = await prisma.mediaAsset.create({
       data: {
         workspaceId,
-        fileName: file.name,
+        fileName: safeFileName,
         fileSize: file.size,
         mimeType: file.type || 'application/octet-stream',
-        storageKey: `workspaces/${workspaceId}/${Date.now()}-${file.name}`,
+        storageKey: `workspaces/${workspaceId}/${Date.now()}-${safeFileName}`,
         publicUrl,
-        folderPath,
+        folderPath: safeFolderPath,
         width: isVideo ? 1080 : 1200,
         height: isVideo ? 1920 : 630,
         duration: isVideo ? 30 : null,
