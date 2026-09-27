@@ -1,9 +1,18 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
-);
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET environment variable is required in production mode.');
+    }
+    return new TextEncoder().encode('innosom-super-secret-jwt-encryption-key-32-bytes!!');
+  }
+  return new TextEncoder().encode(secret);
+}
+
+const JWT_SECRET = getJwtSecret();
 
 export interface SessionPayload {
   userId: string;
@@ -32,9 +41,22 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+export async function getSession(req?: any): Promise<SessionPayload | null> {
+  let token: string | undefined;
+
+  if (req && typeof req.cookies?.get === 'function') {
+    token = req.cookies.get(COOKIE_NAME)?.value;
+  }
+
+  if (!token) {
+    try {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value;
+    } catch {
+      // Out of Next.js server component / server context request scope
+    }
+  }
+
   if (!token) return null;
   return verifySessionToken(token);
 }
