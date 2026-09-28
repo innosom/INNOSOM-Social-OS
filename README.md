@@ -48,7 +48,7 @@
    JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
    ```
 
-3. **Initialize Database & Seed Data**:
+3. **Initialize Local Database (SQLite) & Seed Data**:
    ```bash
    npm run db:push
    npm run db:seed
@@ -60,12 +60,15 @@
    ```
    Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-5. **Demo Accounts**:
+5. **Production PostgreSQL Deployment & Migrations**:
+   For detailed instructions on production PostgreSQL deployment, versioned migrations (`npm run db:migrate:deploy`), and environment configuration, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+6. **Demo Accounts**:
    - Admin: `admin@innosom.com` / `Password123!`
    - Manager: `manager@innosom.com` / `Password123!`
    - Editor: `editor@innosom.com` / `Password123!`
 
-6. **Run Test Suite**:
+7. **Run Test Suite**:
    ```bash
    npm test
    ```
