@@ -16,6 +16,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { id },
       include: {
         socialConnection: true,
+        contentVariant: {
+          include: { content: true },
+        },
       },
     });
 
@@ -31,6 +34,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Guard: Prevent approval bypass. Post must be in APPROVED or SCHEDULED status (and content not DRAFT/IN_REVIEW)
+    const contentStatus = publication.contentVariant.content.status;
+    if (contentStatus === 'DRAFT' || contentStatus === 'IN_REVIEW') {
+      return NextResponse.json(
+        { error: 'Forbidden: Cannot publish content that has not been approved' },
+        { status: 400 }
+      );
+    }
+
+    if (publication.status !== 'SCHEDULED' && publication.status !== 'APPROVED' && publication.status !== 'FAILED') {
+      return NextResponse.json(
+        { error: `Cannot trigger publishing for publication in status '${publication.status}'` },
+        { status: 400 }
+      );
     }
 
     // Enqueue non-blocking job

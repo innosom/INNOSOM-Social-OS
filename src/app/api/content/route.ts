@@ -89,6 +89,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Security check: Validate all requested mediaAssetIds belong strictly to this workspace
+    const requestedMediaIds = Array.from(new Set(platforms.flatMap((p: any) => p.mediaAssetIds || [])));
+    if (requestedMediaIds.length > 0) {
+      const existingMedia = await prisma.mediaAsset.findMany({
+        where: {
+          id: { in: requestedMediaIds },
+          workspaceId,
+        },
+        select: { id: true },
+      });
+      const validMediaSet = new Set(existingMedia.map((m) => m.id));
+      const containsUnauthorizedMedia = requestedMediaIds.some((id: string) => !validMediaSet.has(id));
+      if (containsUnauthorizedMedia) {
+        return NextResponse.json(
+          { error: 'Forbidden: One or more media assets do not belong to the specified workspace' },
+          { status: 403 }
+        );
+      }
+    }
+
     const initialStatus = submitForApproval
       ? 'IN_REVIEW'
       : scheduledAt

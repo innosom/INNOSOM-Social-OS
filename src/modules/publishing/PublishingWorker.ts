@@ -37,14 +37,23 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
     return { success: true };
   }
 
-  await prisma.publication.update({
-    where: { id: publicationId },
+  // Atomic lock transition to PUBLISHING using updateMany to prevent worker race conditions and duplicate publishing
+  const lockResult = await prisma.publication.updateMany({
+    where: {
+      id: publicationId,
+      status: { in: ['SCHEDULED', 'FAILED', 'IN_REVIEW', 'APPROVED'] },
+    },
     data: {
       status: 'PUBLISHING',
       lastAttemptAt: new Date(),
       attempts: { increment: 1 },
     },
   });
+
+  if (lockResult.count === 0) {
+    console.log(`⚠️ [Worker] Publication ${publicationId} already claimed by another worker process or in terminal state. Skipping.`);
+    return { success: true };
+  }
 
   try {
     const provider = SocialProviderFactory.getProvider(publication.socialConnection.platform);

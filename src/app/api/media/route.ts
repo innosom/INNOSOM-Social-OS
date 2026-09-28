@@ -61,7 +61,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const isVideo = file.type.startsWith('video/');
+    // Security validation: File size limit (50MB)
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File size exceeds maximum allowed limit of 50MB' }, { status: 400 });
+    }
+
+    // Security validation: File mime-type check
+    const mimeType = file.type || 'application/octet-stream';
+    if (!mimeType.startsWith('image/') && !mimeType.startsWith('video/')) {
+      return NextResponse.json({ error: 'Unsupported file type. Only image and video files are permitted.' }, { status: 400 });
+    }
+
+    // Sanitize folderPath against directory traversal
+    const safeFolderPath = '/' + folderPath.replace(/\.\./g, '').replace(/\/+/g, '/').replace(/^\//, '');
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+    const isVideo = mimeType.startsWith('video/');
     const sampleUrls = isVideo
       ? [
           'https://assets.mixkit.co/videos/preview/mixkit-tree-branches-in-the-breeze-1188-large.mp4',
@@ -77,12 +93,12 @@ export async function POST(req: NextRequest) {
     const mediaAsset = await prisma.mediaAsset.create({
       data: {
         workspaceId,
-        fileName: file.name,
+        fileName: cleanFileName,
         fileSize: file.size,
-        mimeType: file.type || 'application/octet-stream',
-        storageKey: `workspaces/${workspaceId}/${Date.now()}-${file.name}`,
+        mimeType,
+        storageKey: `workspaces/${workspaceId}/${Date.now()}-${cleanFileName}`,
         publicUrl,
-        folderPath,
+        folderPath: safeFolderPath,
         width: isVideo ? 1080 : 1200,
         height: isVideo ? 1920 : 630,
         duration: isVideo ? 30 : null,
