@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { encryptToken } from '@/lib/encryption';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
+import crypto from 'crypto';
 
 export async function GET(
   req: NextRequest,
@@ -25,11 +26,20 @@ export async function GET(
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Missing authorization code or state parameter.')}`);
   }
 
-  // Validate state parameter and CSRF nonce cookie
+  // Validate HMAC-signed state parameter and CSRF nonce cookie
   let parsedState: { workspaceId: string; provider: string; nonce: string; userId: string };
   try {
-    const stateJson = Buffer.from(stateParam, 'base64url').toString('utf-8');
-    parsedState = JSON.parse(stateJson);
+    const rawStateStr = Buffer.from(stateParam, 'base64url').toString('utf-8');
+    const stateObj = JSON.parse(rawStateStr);
+
+    const secretKey = process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!';
+    const expectedSig = crypto.createHmac('sha256', secretKey).update(stateObj.payload).digest('hex');
+
+    if (!stateObj.sig || stateObj.sig !== expectedSig) {
+      return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth CSRF state signature verification failed.')}`);
+    }
+
+    parsedState = JSON.parse(stateObj.payload);
   } catch {
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Invalid OAuth state parameter.')}`);
   }
@@ -37,6 +47,14 @@ export async function GET(
   const cookieNonce = req.cookies.get(`oauth_state_${provider}`)?.value;
   if (!cookieNonce || cookieNonce !== parsedState.nonce) {
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth CSRF state verification failed.')}`);
+  }
+
+  // Verify target workspace existence
+  const targetWorkspace = await prisma.workspace.findUnique({
+    where: { id: parsedState.workspaceId },
+  });
+  if (!targetWorkspace) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Target workspace does not exist.')}`);
   }
 
   try {
@@ -47,7 +65,7 @@ export async function GET(
     let accountName = '';
     let avatarUrl: string | null = null;
 
-    const isLiveApis = process.env.ENABLE_LIVE_SOCIAL_APIS === 'true';
+    const isLiveApis = process.env.ENABLE_LIVE_SOCIAL_APIS === 'true' || process.env.NODE_ENV === 'production';
 
     if (isLiveApis) {
       if (provider === 'facebook' || provider === 'instagram') {
@@ -236,6 +254,8 @@ export async function GET(
     return response;
   } catch (error: any) {
     console.error(`OAuth callback error for ${provider}:`, error.message || error);
-    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent(error.message || 'OAuth authorization failed.')}`);
+    const rawMsg = error.message || 'OAuth authorization failed.';
+    const sanitizedMsg = rawMsg.replace(/(access_token|client_secret|code|key)=[^&]+/gi, '$1=REDACTED');
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent(sanitizedMsg)}`);
   }
 }

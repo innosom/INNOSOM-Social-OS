@@ -9,6 +9,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // RBAC Guard: Editors cannot approve content
+  if (session.role === 'EDITOR') {
+    return NextResponse.json({ error: 'Forbidden: Editors are not authorized to approve content' }, { status: 403 });
+  }
+
   try {
     const { contentId, action, comment } = await req.json();
 

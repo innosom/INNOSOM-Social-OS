@@ -1,9 +1,17 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
-);
+const DEFAULT_SECRET = 'innosom-super-secret-jwt-encryption-key-32-bytes!!';
+
+export function getJwtSecret(): Uint8Array {
+  const envJwtSecret = process.env.JWT_SECRET;
+
+  if (process.env.NODE_ENV === 'production' && (!envJwtSecret || envJwtSecret === DEFAULT_SECRET)) {
+    throw new Error('Production Configuration Failure: JWT_SECRET environment variable must be explicitly defined in production mode.');
+  }
+
+  return new TextEncoder().encode(envJwtSecret || DEFAULT_SECRET);
+}
 
 export interface SessionPayload {
   userId: string;
@@ -20,12 +28,12 @@ export async function signSessionToken(payload: SessionPayload): Promise<string>
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
-    const verified = await jwtVerify(token, JWT_SECRET);
+    const verified = await jwtVerify(token, getJwtSecret());
     return verified.payload as unknown as SessionPayload;
   } catch (error) {
     return null;
