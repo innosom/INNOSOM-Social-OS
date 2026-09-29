@@ -11,8 +11,9 @@ let connection: Redis | null = null;
 function getRedisConnection(): Redis {
   if (!connection) {
     connection = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      maxRetriesPerRequest: null,
+      maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
+      connectTimeout: 500,
     });
   }
   return connection;
@@ -39,6 +40,14 @@ export async function enqueuePublicationJob(
   publicationId: string,
   delayMs: number = 0
 ): Promise<void> {
+  if (process.env.DISABLE_REDIS === 'true') {
+    setTimeout(() => {
+      processPublicationJob(publicationId).catch((e) =>
+        console.error('Fallback worker error:', e)
+      );
+    }, delayMs);
+    return;
+  }
   try {
     const q = getPublishingQueue();
     await q.add(

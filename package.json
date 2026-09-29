@@ -9,7 +9,7 @@
     "worker": "tsx src/worker.ts",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "tsx tests/encryption.test.ts && tsx tests/publishing.test.ts && tsx tests/providers.test.ts"
+    "test": "DISABLE_REDIS=true tsx tests/encryption.test.ts && DISABLE_REDIS=true tsx tests/providers.test.ts && DISABLE_REDIS=true tsx tests/security.test.ts && DISABLE_REDIS=true tsx tests/integrity.test.ts && DISABLE_REDIS=true tsx tests/media.test.ts && DISABLE_REDIS=true tsx tests/modules.test.ts && DISABLE_REDIS=true tsx tests/publishing.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
