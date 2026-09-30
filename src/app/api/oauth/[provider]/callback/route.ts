@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { encryptToken } from '@/lib/encryption';
+import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
+import crypto from 'crypto';
 
 export async function GET(
   req: NextRequest,
@@ -25,13 +27,37 @@ export async function GET(
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Missing authorization code or state parameter.')}`);
   }
 
-  // Validate state parameter and CSRF nonce cookie
+  // Enforce session check on OAuth callback
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.redirect(`${baseUrl}/login?error=${encodeURIComponent('Authentication required for OAuth callback.')}`);
+  }
+
+  // Validate state HMAC signature and CSRF nonce cookie
   let parsedState: { workspaceId: string; provider: string; nonce: string; userId: string };
   try {
     const stateJson = Buffer.from(stateParam, 'base64url').toString('utf-8');
-    parsedState = JSON.parse(stateJson);
+    const { payload, hmac } = JSON.parse(stateJson);
+
+    const secretKey = process.env.ENCRYPTION_KEY || 'default_oauth_state_hmac_secret_key_32_bytes!';
+    const computedHmac = crypto.createHmac('sha256', secretKey).update(payload).digest('hex');
+
+    if (!crypto.timingSafeEqual(Buffer.from(hmac, 'hex'), Buffer.from(computedHmac, 'hex'))) {
+      return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth state signature verification failed.')}`);
+    }
+
+    parsedState = JSON.parse(payload);
   } catch {
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Invalid OAuth state parameter.')}`);
+  }
+
+  if (parsedState.userId && parsedState.userId !== session.userId) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth session user mismatch.')}`);
+  }
+
+  const { hasAccess } = await validateWorkspaceAccess(session, parsedState.workspaceId, prisma);
+  if (!hasAccess) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Forbidden workspace access in OAuth callback.')}`);
   }
 
   const cookieNonce = req.cookies.get(`oauth_state_${provider}`)?.value;

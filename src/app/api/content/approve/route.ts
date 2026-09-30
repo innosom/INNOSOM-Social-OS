@@ -9,6 +9,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to approve content' }, { status: 403 });
+  }
+
   try {
     const { contentId, action, comment } = await req.json();
 
@@ -33,6 +37,10 @@ export async function POST(req: NextRequest) {
     const { hasAccess } = await validateWorkspaceAccess(session, content.workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (content.status !== 'IN_REVIEW') {
+      return NextResponse.json({ error: `Content is not pending review (current status: ${content.status})` }, { status: 400 });
     }
 
     const newStatus = action === 'APPROVE' ? 'APPROVED' : 'DRAFT';

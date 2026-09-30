@@ -1,10 +1,6 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
-);
-
 export interface SessionPayload {
   userId: string;
   email: string;
@@ -15,17 +11,31 @@ export interface SessionPayload {
 
 const COOKIE_NAME = 'innosom_session';
 
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET environment variable is required in production.');
+    }
+    return new TextEncoder().encode('innosom-super-secret-jwt-encryption-key-32-bytes!!');
+  }
+  if (secret.length < 32 && process.env.NODE_ENV === 'production') {
+    throw new Error('JWT_SECRET must be at least 32 characters in production.');
+  }
+  return new TextEncoder().encode(secret);
+}
+
 export async function signSessionToken(payload: SessionPayload): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifySessionToken(token: string): Promise<SessionPayload | null> {
   try {
-    const verified = await jwtVerify(token, JWT_SECRET);
+    const verified = await jwtVerify(token, getJwtSecret());
     return verified.payload as unknown as SessionPayload;
   } catch (error) {
     return null;
@@ -62,7 +72,7 @@ export async function validateWorkspaceAccess(
   prismaClient: any
 ): Promise<{ hasAccess: boolean; workspace: any | null }> {
   if (!workspaceId || workspaceId === 'ALL_CLIENTS') {
-    return { hasAccess: true, workspace: null };
+    return { hasAccess: false, workspace: null };
   }
 
   const workspace = await prismaClient.workspace.findFirst({
