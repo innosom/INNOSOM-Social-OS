@@ -61,7 +61,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const isImage = file.type.startsWith('image/');
     const isVideo = file.type.startsWith('video/');
+
+    if (!isImage && !isVideo) {
+      return NextResponse.json({ error: 'Unsupported file type. Only images and videos are allowed.' }, { status: 400 });
+    }
+
+    const MAX_FILE_SIZE = isVideo ? 100 * 1024 * 1024 : 10 * 1024 * 1024; // 100MB video, 10MB image
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: `File size exceeds the maximum limit of ${isVideo ? '100MB' : '10MB'}` }, { status: 400 });
+    }
+
     const sampleUrls = isVideo
       ? [
           'https://assets.mixkit.co/videos/preview/mixkit-tree-branches-in-the-breeze-1188-large.mp4',

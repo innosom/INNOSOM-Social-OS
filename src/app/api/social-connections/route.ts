@@ -80,6 +80,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to connect social account' }, { status: 403 });
+  }
+
   try {
     const { workspaceId, platform, accountName, accountId, avatarUrl, accessToken, refreshToken } = await req.json();
 
@@ -138,6 +142,10 @@ export async function DELETE(req: NextRequest) {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to disconnect social account' }, { status: 403 });
   }
 
   try {

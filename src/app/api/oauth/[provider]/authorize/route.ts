@@ -29,9 +29,12 @@ export async function GET(
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   const redirectUri = `${baseUrl}/api/oauth/${provider}/callback`;
 
-  // Create state token encoding workspaceId, provider, and random nonce to prevent CSRF
+  // Create state token encoding workspaceId, provider, and random nonce signed with HMAC to prevent tampering
   const nonce = crypto.randomBytes(16).toString('hex');
-  const stateData = JSON.stringify({ workspaceId, provider, nonce, userId: session.userId });
+  const secretKey = process.env.ENCRYPTION_KEY || 'default_oauth_state_hmac_secret_key_32_bytes!';
+  const payload = JSON.stringify({ workspaceId, provider, nonce, userId: session.userId });
+  const hmac = crypto.createHmac('sha256', secretKey).update(payload).digest('hex');
+  const stateData = JSON.stringify({ payload, hmac });
   const state = Buffer.from(stateData).toString('base64url');
 
   let authUrl = '';

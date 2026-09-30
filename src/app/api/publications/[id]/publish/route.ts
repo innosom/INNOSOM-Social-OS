@@ -9,6 +9,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+    return NextResponse.json({ error: 'Forbidden: Insufficient permissions to publish' }, { status: 403 });
+  }
+
   const { id } = await params;
 
   try {
@@ -31,6 +35,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    if (publication.status !== 'APPROVED' && publication.status !== 'SCHEDULED') {
+      return NextResponse.json(
+        { error: `Publication cannot be executed in current status: ${publication.status}` },
+        { status: 400 }
+      );
     }
 
     // Enqueue non-blocking job
