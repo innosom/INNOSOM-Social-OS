@@ -100,10 +100,21 @@ async function runEncryptionTests() {
     const sensitiveToken = 'live_production_meta_graph_api_token_12345';
     const encryptedForDb = encryptToken(sensitiveToken)!;
 
-    // Find test workspace
-    const workspace = await prisma.workspace.findFirst();
+    // Find or create test workspace
+    let workspace = await prisma.workspace.findFirst();
+    let tempOrgCreated = false;
     if (!workspace) {
-      throw new Error('No workspace found in DB to perform persistence test.');
+      const tempOrg = await prisma.organization.create({
+        data: { name: 'Temp Encryption Test Org', slug: `temp_org_${Date.now()}` },
+      });
+      workspace = await prisma.workspace.create({
+        data: {
+          organizationId: tempOrg.id,
+          name: 'Temp Encryption Test Workspace',
+          slug: `temp_ws_${Date.now()}`,
+        },
+      });
+      tempOrgCreated = true;
     }
 
     const createdConn = await prisma.socialConnection.create({
@@ -111,7 +122,7 @@ async function runEncryptionTests() {
         workspaceId: workspace.id,
         platform: 'FACEBOOK',
         accountName: 'Security Test Account',
-        accountId: 'sec_test_1001',
+        accountId: `sec_test_${Date.now()}`,
         status: 'CONNECTED',
         accessTokenEnc: encryptedForDb,
       },
@@ -136,6 +147,9 @@ async function runEncryptionTests() {
 
     // Clean up test connection
     await prisma.socialConnection.delete({ where: { id: createdConn.id } });
+    if (tempOrgCreated && workspace) {
+      await prisma.organization.delete({ where: { id: workspace.organizationId } });
+    }
     console.log('✅ 5. Persistence security test passed (plaintext never stored).');
 
     // 6. Development mock credential preservation test
