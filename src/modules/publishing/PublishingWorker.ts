@@ -4,6 +4,33 @@ import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 export async function processPublicationJob(publicationId: string): Promise<{ success: boolean; error?: string }> {
   console.log(`🚀 [Worker] Starting publication execution for ID: ${publicationId}`);
 
+  // Atomic database-level status transition to 'PUBLISHING' to prevent worker race conditions
+  const claimResult = await prisma.publication.updateMany({
+    where: {
+      id: publicationId,
+      status: { in: ['SCHEDULED', 'FAILED', 'APPROVED'] },
+    },
+    data: {
+      status: 'PUBLISHING',
+      lastAttemptAt: new Date(),
+      attempts: { increment: 1 },
+    },
+  });
+
+  if (claimResult.count === 0) {
+    const existing = await prisma.publication.findUnique({ where: { id: publicationId } });
+    if (!existing) {
+      console.error(`❌ [Worker] Publication ${publicationId} not found.`);
+      return { success: false, error: 'Publication record not found' };
+    }
+    if (existing.status === 'PUBLISHED') {
+      console.log(`ℹ️ [Worker] Publication ${publicationId} is already PUBLISHED. Skipping.`);
+      return { success: true };
+    }
+    console.warn(`⚠️ [Worker] Publication ${publicationId} is already in status ${existing.status}. Skipping duplicate execution.`);
+    return { success: false, error: `Publication already in progress or invalid state (${existing.status})` };
+  }
+
   const publication = await prisma.publication.findUnique({
     where: { id: publicationId },
     include: {
@@ -28,23 +55,9 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
   });
 
   if (!publication) {
-    console.error(`❌ [Worker] Publication ${publicationId} not found.`);
+    console.error(`❌ [Worker] Publication ${publicationId} not found after claim.`);
     return { success: false, error: 'Publication record not found' };
   }
-
-  if (publication.status === 'PUBLISHED') {
-    console.log(`ℹ️ [Worker] Publication ${publicationId} is already PUBLISHED. Skipping.`);
-    return { success: true };
-  }
-
-  await prisma.publication.update({
-    where: { id: publicationId },
-    data: {
-      status: 'PUBLISHING',
-      lastAttemptAt: new Date(),
-      attempts: { increment: 1 },
-    },
-  });
 
   try {
     const provider = SocialProviderFactory.getProvider(publication.socialConnection.platform);

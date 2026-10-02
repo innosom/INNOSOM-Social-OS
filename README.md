@@ -16,7 +16,7 @@
    - Pre-Publishing Confirmation Safety Check modal to prevent wrong-account posting errors.
 
 3. **Async Background Publishing & Provider Abstraction**:
-   - Durable queue architecture (`PublishingWorker.ts`) with idempotency locks, retries, and failure recording.
+   - Durable queue architecture (`PublishingWorker.ts`) with atomic database locks, retries, and failure recording.
    - Provider abstraction (`SocialProvider`) with `MockSocialProvider` simulating network latency, rate limits, token expirations, and successful posts in local development.
 
 4. **Token & Connection Health Monitoring**:
@@ -28,7 +28,15 @@
 
 ---
 
-## Local Development & Setup
+## Database Architecture: Local Dev (SQLite) vs Production (PostgreSQL)
+
+- **Local Development**: SQLite (`prisma/schema.sqlite.prisma`) for fast, lightweight setup (`npm run db:push`).
+- **Production**: PostgreSQL (`prisma/schema.prisma`) with versioned migrations (`npm run db:migrate:deploy`).
+- Detailed deployment instructions: See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
+---
+
+## Quick Start (Local Development)
 
 ### Prerequisites
 - Node.js 18+ or 20+
@@ -48,7 +56,7 @@
    JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
    ```
 
-3. **Initialize Database & Seed Data**:
+3. **Initialize Local Database & Seed Data**:
    ```bash
    npm run db:push
    npm run db:seed
@@ -65,7 +73,21 @@
    - Manager: `manager@innosom.com` / `Password123!`
    - Editor: `editor@innosom.com` / `Password123!`
 
-6. **Run Test Suite**:
+---
+
+## Production PostgreSQL Operations
+
+1. **Deploy Migrations**:
+   ```bash
+   npm run db:migrate:deploy
+   ```
+
+2. **Seed Initial Database**:
+   ```bash
+   npm run db:seed
+   ```
+
+3. **Run Test Suite**:
    ```bash
    npm test
    ```
