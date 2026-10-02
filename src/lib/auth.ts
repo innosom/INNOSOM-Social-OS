@@ -32,9 +32,28 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
+export async function getSession(req?: any): Promise<SessionPayload | null> {
+  let token: string | undefined;
+
+  if (req) {
+    const cookieHeader = req.headers?.get?.('cookie') || '';
+    const match = cookieHeader.match(new RegExp(`(?:^|; )${COOKIE_NAME}=([^;]*)`));
+    if (match) {
+      token = decodeURIComponent(match[1]);
+    } else if (req.cookies?.get) {
+      token = req.cookies.get(COOKIE_NAME)?.value;
+    }
+  }
+
+  if (!token) {
+    try {
+      const cookieStore = await cookies();
+      token = cookieStore.get(COOKIE_NAME)?.value;
+    } catch {
+      // outside Next.js request context
+    }
+  }
+
   if (!token) return null;
   return verifySessionToken(token);
 }
