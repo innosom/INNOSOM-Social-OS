@@ -26,6 +26,11 @@
    - States: `DRAFT`, `IN_REVIEW`, `APPROVED`, `SCHEDULED`, `PUBLISHING`, `PUBLISHED`, `FAILED`.
    - Immutable audit logging tracking all sensitive agency operational actions.
 
+6. **Dual Database Architecture (SQLite Dev / PostgreSQL Production)**:
+   - Local development uses lightweight zero-dependency SQLite.
+   - Production uses PostgreSQL with versioned migrations (`prisma/migrations/`) and optimized compound indexes for background publishing scheduler performance and multi-tenant scaling.
+   - Detailed deployment instructions available in [`docs/DATABASE_DEPLOYMENT.md`](docs/DATABASE_DEPLOYMENT.md).
+
 ---
 
 ## Local Development & Setup
@@ -46,6 +51,7 @@
    ```env
    DATABASE_URL="file:./dev.db"
    JWT_SECRET="innosom-super-secret-jwt-encryption-key-32-bytes!!"
+   ENCRYPTION_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
    ```
 
 3. **Initialize Database & Seed Data**:
@@ -68,4 +74,26 @@
 6. **Run Test Suite**:
    ```bash
    npm test
+   ```
+
+---
+
+## Production Deployment (PostgreSQL)
+
+For PostgreSQL production deployment:
+
+1. **Set Environment Variable**:
+   Set `DATABASE_URL` in `.env.production` to your PostgreSQL database URL (`postgresql://user:password@host:5432/dbname?sslmode=require`).
+
+2. **Apply Migrations & Seed**:
+   ```bash
+   npm run db:generate:pg
+   npm run db:migrate:deploy
+   npm run db:seed
+   ```
+
+3. **Build & Start**:
+   ```bash
+   npm run build
+   npm run start
    ```

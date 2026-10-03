@@ -92,7 +92,6 @@ model SocialConnection {
 
   @@unique([workspaceId, platform, accountId])
   @@index([workspaceId])
-  @@index([workspaceId, status])
 }
 
 model MediaAsset {
@@ -132,7 +131,6 @@ model Content {
 
   @@index([workspaceId])
   @@index([status])
-  @@index([workspaceId, status])
 }
 
 model ContentVariant {
@@ -182,8 +180,6 @@ model Publication {
 
   @@index([scheduledAt])
   @@index([status])
-  @@index([status, scheduledAt])
-  @@index([socialConnectionId, status])
 }
 
 model Approval {
