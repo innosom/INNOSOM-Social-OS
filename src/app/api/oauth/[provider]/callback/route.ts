@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getSession, validateWorkspaceAccess } from '@/lib/auth';
 import { encryptToken } from '@/lib/encryption';
 import { SocialProviderFactory } from '@/modules/social/SocialProviderFactory';
 
@@ -25,6 +26,12 @@ export async function GET(
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Missing authorization code or state parameter.')}`);
   }
 
+  // Validate session authentication
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.redirect(`${baseUrl}/login?error=${encodeURIComponent('Unauthorized. Please log in.')}`);
+  }
+
   // Validate state parameter and CSRF nonce cookie
   let parsedState: { workspaceId: string; provider: string; nonce: string; userId: string };
   try {
@@ -37,6 +44,12 @@ export async function GET(
   const cookieNonce = req.cookies.get(`oauth_state_${provider}`)?.value;
   if (!cookieNonce || cookieNonce !== parsedState.nonce) {
     return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('OAuth CSRF state verification failed.')}`);
+  }
+
+  // Validate user has permission for the target workspace
+  const { hasAccess } = await validateWorkspaceAccess(session, parsedState.workspaceId, prisma);
+  if (!hasAccess) {
+    return NextResponse.redirect(`${baseUrl}/settings?error=${encodeURIComponent('Forbidden: Insufficient access to target workspace.')}`);
   }
 
   try {

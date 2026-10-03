@@ -89,10 +89,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Enforce approval workflow: EDITOR cannot publish directly without ADMIN/MANAGER approval.
+    const isElevatedRole = session.role === 'ADMIN' || session.role === 'MANAGER';
     const initialStatus = submitForApproval
       ? 'IN_REVIEW'
       : scheduledAt
-      ? 'SCHEDULED'
+      ? isElevatedRole
+        ? 'SCHEDULED'
+        : 'IN_REVIEW'
       : 'DRAFT';
 
     const content = await prisma.content.create({

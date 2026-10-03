@@ -1,8 +1,18 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
+const DEFAULT_JWT_SECRET = 'innosom-super-secret-jwt-encryption-key-32-bytes!!';
+
+export function validateJwtSecretConfig(): void {
+  if (process.env.NODE_ENV === 'production') {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET === DEFAULT_JWT_SECRET) {
+      throw new Error('FATAL CONFIGURATION ERROR: JWT_SECRET environment variable is missing or using default fallback in production.');
+    }
+  }
+}
+
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'innosom-super-secret-jwt-encryption-key-32-bytes!!'
+  process.env.JWT_SECRET || DEFAULT_JWT_SECRET
 );
 
 export interface SessionPayload {

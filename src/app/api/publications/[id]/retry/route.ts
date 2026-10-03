@@ -33,6 +33,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Role check: Only ADMIN and MANAGER can trigger retries
+    if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to retry publication' }, { status: 403 });
+    }
+
+    // Status check: Only FAILED publications can be retried
+    if (publication.status !== 'FAILED') {
+      return NextResponse.json({ error: `Cannot retry publication with status '${publication.status}'. Only FAILED publications can be retried.` }, { status: 400 });
+    }
+
     // Reset status and idempotency key suffix for retry
     await prisma.publication.update({
       where: { id },
