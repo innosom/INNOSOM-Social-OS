@@ -37,14 +37,23 @@ export async function processPublicationJob(publicationId: string): Promise<{ su
     return { success: true };
   }
 
-  await prisma.publication.update({
-    where: { id: publicationId },
+  // Atomic state transition: Ensure single worker execution and prevent duplicate posting race conditions
+  const updateResult = await prisma.publication.updateMany({
+    where: {
+      id: publicationId,
+      status: { in: ['SCHEDULED', 'APPROVED', 'FAILED'] },
+    },
     data: {
       status: 'PUBLISHING',
       lastAttemptAt: new Date(),
       attempts: { increment: 1 },
     },
   });
+
+  if (updateResult.count === 0) {
+    console.log(`⚠️ [Worker] Publication ${publicationId} lock acquisition failed (already in PUBLISHING or PUBLISHED state). Skipping execution.`);
+    return { success: true };
+  }
 
   try {
     const provider = SocialProviderFactory.getProvider(publication.socialConnection.platform);

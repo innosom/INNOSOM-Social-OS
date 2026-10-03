@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const workspaceId = formData.get('workspaceId') as string;
     const file = formData.get('file') as File | null;
-    const folderPath = (formData.get('folderPath') as string) || '/';
+    let folderPath = (formData.get('folderPath') as string) || '/';
 
     if (!workspaceId || !file) {
       return NextResponse.json({ error: 'workspaceId and file are required' }, { status: 400 });
@@ -59,6 +59,23 @@ export async function POST(req: NextRequest) {
     const { hasAccess } = await validateWorkspaceAccess(session, workspaceId, prisma);
     if (!hasAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // Sanitize folder path against directory traversal
+    folderPath = folderPath.replace(/\\/g, '/').replace(/\.\./g, '').replace(/\/+/g, '/');
+    if (!folderPath.startsWith('/')) {
+      folderPath = '/' + folderPath;
+    }
+
+    // File type and size validations (max 100MB)
+    const MAX_FILE_SIZE = 100 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: 'File size exceeds maximum allowed limit of 100MB' }, { status: 400 });
+    }
+
+    const allowedMtime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/quicktime', 'video/webm'];
+    if (file.type && !allowedMtime.includes(file.type)) {
+      return NextResponse.json({ error: `File type '${file.type}' is not supported` }, { status: 400 });
     }
 
     const isVideo = file.type.startsWith('video/');

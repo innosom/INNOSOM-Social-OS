@@ -33,6 +33,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    // Role check: Only ADMIN and MANAGER can manually execute publication triggers
+    if (session.role !== 'ADMIN' && session.role !== 'MANAGER') {
+      return NextResponse.json({ error: 'Forbidden: Insufficient permissions to execute publication' }, { status: 403 });
+    }
+
+    // Status check: Can only trigger publication for APPROVED or SCHEDULED status
+    if (publication.status !== 'APPROVED' && publication.status !== 'SCHEDULED') {
+      return NextResponse.json({ error: `Cannot execute publication in '${publication.status}' status` }, { status: 400 });
+    }
+
     // Enqueue non-blocking job
     await enqueuePublicationJob(publication.id, 0);
 
