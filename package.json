@@ -9,7 +9,7 @@
     "worker": "tsx src/worker.ts",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "test": "tsx tests/encryption.test.ts && tsx tests/publishing.test.ts && tsx tests/providers.test.ts"
+    "test": "export DATABASE_URL=\"file:./dev.db\" ENCRYPTION_KEY=\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\" JWT_SECRET=\"innosom-super-secret-jwt-encryption-key-32-bytes!!\" DISABLE_REDIS=true; tsx tests/encryption.test.ts && tsx tests/providers.test.ts && tsx tests/publishing.test.ts && tsx tests/security.test.ts && tsx tests/data_integrity.test.ts && tsx tests/media.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
